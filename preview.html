@@ -1316,14 +1316,15 @@ const Scene = (() => {
   function setTime(ms, tz) { tg.time = ms; if (Math.abs(ms - monthAt) > 3600e3 || tz !== monthTz) { monthAt = ms; monthTz = tz; const m = localMonth(ms, tz); st.month = st.south ? (m + 6) % 12 : m; } }
 
   const vSun = new THREE.Vector3(), vMoon = new THREE.Vector3(), vF = new THREE.Vector3(), vR = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
-  function tick(dt, t) {
+  function tick(dt, t, rawDt) {
     if (!ok) return;
-    const k = 1 - Math.exp(-dt * 2.2);
+    const sdt = rawDt || dt; // weather state follows real elapsed time, even when frames are slow
+    const k = 1 - Math.exp(-sdt * 2.2);
     for (const n of ['cloud', 'rain', 'snow', 'storm', 'fog', 'wind', 'wx', 'wz', 'temp']) st[n] += (tg[n] - st[n]) * k;
-    st.snowline += (tg.snowline - st.snowline) * (1 - Math.exp(-dt * 0.9));
+    st.snowline += (tg.snowline - st.snowline) * (1 - Math.exp(-sdt * 0.9));
     let diff = tg.time - st.time;
     if (Math.abs(diff) > 30 * 3600e3) { st.time = tg.time - Math.sign(diff) * 6 * 3600e3; diff = tg.time - st.time; }
-    st.time += diff * (1 - Math.exp(-dt * 3));
+    st.time += diff * (1 - Math.exp(-sdt * 3));
     if (!visible) return;
     const pdt = REDUCE ? 0 : dt;
 
@@ -1782,7 +1783,7 @@ $('retryBtn').addEventListener('click', () => load(PLACE));
 /* ---------- main loop ---------- */
 let lastFrame = performance.now(), secAcc = 0, sceneLive = true;
 function frame(now) {
-  const dt = Math.min(0.05, (now - lastFrame) / 1000); lastFrame = now;
+  const rawDt = Math.min(3, (now - lastFrame) / 1000), dt = Math.min(0.05, rawDt); lastFrame = now;
   if (D) {
     if (S.playing) {
       const end = Math.min(CFG.hoursShown - 1, maxSceneH());
@@ -1800,7 +1801,7 @@ function frame(now) {
     }
   }
   if (sceneLive) {
-    try { Scene.tick(dt, now / 1000); }
+    try { Scene.tick(dt, now / 1000, rawDt); }
     catch (err) { sceneLive = false; console.error('3D view stopped:', err); }
   }
   requestAnimationFrame(frame);

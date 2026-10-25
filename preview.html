@@ -1,0 +1,1820 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>Fjordvær</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="3D weather forecast app with live data from Open-Meteo.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@300;600;800&family=Familjen+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a full-bleed fjord diorama (3D) is the hero; a scrubbable 48-hour strip drives the scene; below it a 10-day list sits beside an instrument panel of readings. */
+:root{
+  --bg:#ECF0F2; --surface:#F7F9FA; --raise:#FFFFFF; --ink:#14212B; --muted:#5A6874; --line:#D3DBE1;
+  --accent:#B07408; --warm:#BF3A26; --cold:#1C62B3; --rain:#2B83C5;
+  --sun:#E39A12; --cloud:#AAB6C0; --cloud-dark:#7A8794; --flake:#6E9CC4; --moon:#97A6B7;
+  --on-sky:#FFFFFF; --on-sky-dim:rgba(255,255,255,.80); --glass:rgba(255,255,255,.15); --glass-line:rgba(255,255,255,.32);
+  --f-display:"Big Shoulders Display","Arial Narrow","Roboto Condensed",sans-serif;
+  --f-body:"Familjen Grotesk",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0B1217; --surface:#111B22; --raise:#17232C; --ink:#E3EBEF; --muted:#8C9BA6; --line:#23313B;
+    --accent:#F0B43C; --warm:#FF7559; --cold:#6AAEFF; --rain:#57A8E6;
+    --sun:#F5BC45; --cloud:#8795A1; --cloud-dark:#5C6975; --flake:#CFE2F5; --moon:#C9D3DE;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0B1217; --surface:#111B22; --raise:#17232C; --ink:#E3EBEF; --muted:#8C9BA6; --line:#23313B;
+  --accent:#F0B43C; --warm:#FF7559; --cold:#6AAEFF; --rain:#57A8E6;
+  --sun:#F5BC45; --cloud:#8795A1; --cloud-dark:#5C6975; --flake:#CFE2F5; --moon:#C9D3DE;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{background:var(--bg)}
+body{color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1,h2{margin:0;text-wrap:balance}
+.mono{font-family:var(--f-mono)}
+.warm{color:var(--warm);fill:var(--warm)}
+.cold{color:var(--cold);fill:var(--cold)}
+.wrap{width:100%;max-width:1160px;margin-inline:auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* ---------- Stage ---------- */
+.stage{position:relative;height:clamp(420px,60vh,640px);color:var(--on-sky);z-index:3}
+.sky{position:absolute;inset:0;overflow:hidden;background:linear-gradient(180deg,#2F5F9A 0%,#7C9FC4 60%,#E2A577 100%)}
+.sky canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:pan-y;cursor:grab}
+.sky canvas.drag{cursor:grabbing}
+.sky::before{content:"";position:absolute;inset:0 0 auto;height:140px;background:linear-gradient(rgba(5,10,18,.42),rgba(5,10,18,0));pointer-events:none;z-index:1}
+.sky::after{content:"";position:absolute;inset:auto 0 0;height:62%;background:linear-gradient(to top,rgba(5,10,18,.66),rgba(5,10,18,0));pointer-events:none;z-index:1}
+.stage-top,.stage-bottom{position:absolute;left:0;right:0;z-index:2;pointer-events:none}
+.stage-top{top:0;padding-block:14px 0}
+.stage-bottom{bottom:0;padding-block:0 20px}
+.search,.sbtn,.results{pointer-events:auto}
+.topbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px}
+.brand{display:flex;align-items:center;gap:12px;flex:1 1 auto;min-width:0}
+.logo{font-family:var(--f-display);font-weight:800;font-size:23px;letter-spacing:.07em;text-transform:uppercase;line-height:1}
+.chip{display:inline-flex;align-items:center;gap:7px;font:500 11px/1 var(--f-mono);letter-spacing:.06em;text-transform:uppercase;padding:6px 9px;border-radius:99px;background:var(--glass);border:1px solid var(--glass-line);white-space:nowrap;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.chip i{width:7px;height:7px;border-radius:50%;background:#9FB0BE;flex:none}
+.chip[data-mode="live"] i{background:#5BE08A;box-shadow:0 0 0 3px rgba(91,224,138,.25)}
+.chip[data-mode="example"] i{background:#F5BC45}
+.controls{display:flex;gap:8px;align-items:center;flex:1 1 320px;justify-content:flex-end;min-width:0}
+.search{position:relative;flex:1 1 220px;max-width:340px;min-width:0}
+.search input{width:100%;height:38px;border-radius:8px;border:1px solid var(--glass-line);background:var(--glass);color:var(--on-sky);padding:0 12px 0 34px;outline:none;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);font-size:15px}
+.search input::placeholder{color:var(--on-sky-dim)}
+.search input:focus{border-color:rgba(255,255,255,.7);background:rgba(255,255,255,.22)}
+.search input::-webkit-search-cancel-button{filter:invert(1)}
+.sicon{position:absolute;left:11px;top:11px;width:16px;height:16px;fill:none;stroke:var(--on-sky);stroke-width:1.8;stroke-linecap:round;pointer-events:none}
+.sbtn{height:38px;min-width:38px;padding:0 10px;border-radius:8px;border:1px solid var(--glass-line);background:var(--glass);color:var(--on-sky);display:inline-flex;align-items:center;justify-content:center;font:500 12.5px/1 var(--f-mono);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);flex:none}
+.sbtn:hover{background:rgba(255,255,255,.25)}
+.sbtn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}
+.results{position:absolute;top:44px;left:0;right:0;margin:0;padding:6px;list-style:none;background:var(--raise);color:var(--ink);border:1px solid var(--line);border-radius:10px;box-shadow:0 18px 40px rgba(8,16,24,.28);max-height:min(330px,60vh);overflow:auto;z-index:20;min-width:240px}
+.results li{display:flex;align-items:baseline;gap:8px;padding:9px 10px;border-radius:7px;cursor:pointer}
+.results li[aria-selected="true"],.results li:hover{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.results li b{font-weight:600}
+.results li span{color:var(--muted);font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.results li em{font:normal 11px var(--f-mono);color:var(--muted);flex:none}
+.results .rhead{font:500 10.5px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:8px 10px 4px;cursor:default;background:none!important}
+.results .rnote{font-size:12.5px;color:var(--muted);padding:8px 10px;cursor:default;background:none!important;display:block}
+.nowrow{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px 16px}
+.now{flex:1 1 300px;min-width:0;text-shadow:0 1px 14px rgba(0,0,0,.28)}
+.cond{flex:1 1 auto}
+.place{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.place h1{font-family:var(--f-body);font-weight:600;font-size:21px;letter-spacing:-.005em}
+.place span{color:var(--on-sky-dim);font-size:14px}
+.templine{display:flex;align-items:flex-end;gap:14px;margin-top:2px}
+.bigtemp{font-family:var(--f-display);font-weight:300;font-size:clamp(96px,24vw,170px);line-height:.8;letter-spacing:-.01em;font-variant-numeric:tabular-nums;margin-left:-4px}
+.cond{display:flex;flex-direction:column;gap:2px;padding-bottom:6px;min-width:0}
+.cond b{font-weight:600;font-size:18px;line-height:1.15}
+.cond span{color:var(--on-sky-dim);font-size:14px}
+.when{margin-top:10px;font-size:12px;letter-spacing:.05em;color:var(--on-sky-dim);text-transform:uppercase;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
+.biome{font:500 10.5px/1 var(--f-mono);letter-spacing:.08em;padding:5px 8px;border-radius:99px;background:var(--glass);border:1px solid var(--glass-line);color:var(--on-sky);text-shadow:none}
+.biome:empty{display:none}
+.windbadge{display:flex;align-items:center;gap:10px;flex:none;padding-bottom:4px;text-shadow:0 1px 10px rgba(0,0,0,.3)}
+.windbadge svg{width:58px;height:58px;overflow:visible}
+.windbadge .wb-ring{fill:rgba(255,255,255,.1);stroke:rgba(255,255,255,.55);stroke-width:1.2}
+.windbadge .wb-n{font:600 9px var(--f-mono);fill:#fff}
+.windbadge .wb-arrow{fill:#fff;transition:transform .5s ease}
+.wb-text{display:flex;flex-direction:column;line-height:1.15}
+.wb-text b{font-family:var(--f-display);font-weight:600;font-size:30px;letter-spacing:.01em}
+.wb-text b small{font:500 12px var(--f-mono);margin-left:3px;opacity:.85}
+.wb-text span{font-size:12.5px;color:var(--on-sky-dim)}
+.nogl{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);font:500 12px var(--f-mono);color:var(--on-sky-dim);text-align:center;z-index:1}
+
+/* ---------- Notice ---------- */
+.notice{background:var(--surface);border-bottom:1px solid var(--line)}
+.notice-in{display:flex;gap:12px;align-items:flex-start;padding-block:12px;flex-wrap:wrap}
+.notice-in p{margin:0;flex:1 1 320px;min-width:0;max-width:78ch;font-size:14px;color:var(--ink)}
+.ndot{width:9px;height:9px;border-radius:50%;background:var(--accent);margin-top:6px;flex:none}
+.tbtn{border:1px solid var(--line);background:var(--raise);border-radius:7px;padding:7px 12px;font-size:13.5px;font-weight:500;flex:none}
+.tbtn:hover{border-color:var(--muted)}
+.tbtn[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+
+/* ---------- Timeline ---------- */
+.timeline{background:var(--surface);border-bottom:1px solid var(--line)}
+.timeline .wrap{padding-block:18px 14px}
+.tl-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h2{font-family:var(--f-display);font-weight:600;font-size:26px;letter-spacing:.02em;line-height:1}
+.tl-ctrl{display:flex;gap:8px}
+.tbtn svg{width:11px;height:11px;fill:currentColor;margin-right:6px;vertical-align:-1px}
+.scrub{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;margin-top:14px}
+.scrub span,.scrub output{font:500 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.scrub output{color:var(--ink);min-width:12ch;text-align:right}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:28px;background:transparent;margin:0}
+input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(90deg,var(--accent) var(--p,0%),var(--line) var(--p,0%))}
+input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:var(--line)}
+input[type=range]::-moz-range-progress{height:4px;border-radius:2px;background:var(--accent)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--raise);border:2px solid var(--accent);margin-top:-8px;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--raise);border:2px solid var(--accent)}
+.hours{overflow-x:auto;overscroll-behavior-x:contain;margin-top:8px;padding-bottom:6px;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.hours svg{display:block}
+.hcap{margin-top:8px;font:400 11px/1.5 var(--f-mono);color:var(--muted);letter-spacing:.02em}
+.hx-time{font:500 11.5px var(--f-mono);fill:var(--muted)}
+.hx-time.now{fill:var(--ink);font-weight:500}
+.hx-day{font:500 10.5px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;fill:var(--ink)}
+.hx-sep{stroke:var(--line);stroke-width:1}
+.hx-zero{stroke:var(--muted);stroke-width:1;stroke-dasharray:3 4;opacity:.6}
+.hx-line{fill:none;stroke:var(--ink);stroke-opacity:.32;stroke-width:1.6;stroke-linejoin:round}
+.hx-temp{font:600 13px var(--f-body)}
+.hx-bar{fill:var(--rain);fill-opacity:.85}
+.hx-mm{font:500 10px var(--f-mono);fill:var(--rain)}
+.hx-arrow{fill:var(--ink);fill-opacity:.72}
+.hx-ws{font:500 11px var(--f-mono);fill:var(--muted)}
+.hx-sel{fill:var(--accent);fill-opacity:.13}
+.hx-selbar{fill:var(--accent)}
+.hx-hit{fill:transparent;cursor:pointer}
+
+/* Icons */
+.i-sun{fill:var(--sun);stroke:var(--sun)}
+.i-sun line{stroke-width:2;stroke-linecap:round}
+.i-moon{fill:var(--moon)}
+.i-cloud{fill:var(--cloud)}
+.i-cloud.d{fill:var(--cloud-dark)}
+.i-rain{stroke:var(--rain);stroke-width:2;stroke-linecap:round;fill:none}
+.i-flake{fill:var(--flake)}
+.i-bolt{fill:var(--sun)}
+.i-fog{stroke:var(--cloud-dark);stroke-width:2;stroke-linecap:round}
+
+/* ---------- Main ---------- */
+.grid{display:grid;grid-template-columns:minmax(0,1fr);gap:34px;padding-block:28px 12px}
+@media (min-width:920px){.grid{grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:44px}}
+.sec-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px}
+.sec-head .mono{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.days{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+.day{width:100%;display:grid;grid-template-columns:minmax(64px,92px) 34px minmax(0,1fr) 50px 58px;align-items:center;gap:10px;padding:10px 6px;border:0;border-bottom:1px solid var(--line);background:none;text-align:left;border-radius:0}
+.day:hover{background:color-mix(in srgb,var(--ink) 4%,transparent)}
+.day[aria-pressed="true"]{background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.dname{display:flex;flex-direction:column;line-height:1.15;min-width:0}
+.dname b{font-weight:600;font-size:15px}
+.dname small{font:400 11px var(--f-mono);color:var(--muted);letter-spacing:.03em}
+.dicon svg{width:32px;height:32px;display:block}
+.drange{display:grid;grid-template-columns:34px minmax(0,1fr) 34px;align-items:center;gap:8px;font-variant-numeric:tabular-nums;font-weight:600}
+.drange .tmin{text-align:right}
+.dbar{position:relative;height:6px;border-radius:3px;background:color-mix(in srgb,var(--ink) 8%,transparent)}
+.dbar i{position:absolute;top:0;bottom:0;border-radius:3px}
+.dprec{font:500 13px var(--f-mono);color:var(--rain);text-align:right;white-space:nowrap}
+.dprec.zero{color:var(--muted);opacity:.6}
+.dprec small{font-size:10px;margin-left:1px}
+.dwind{display:flex;align-items:center;justify-content:flex-end;gap:4px;font:500 13px var(--f-mono);color:var(--muted);white-space:nowrap}
+.dwind svg{width:14px;height:14px;flex:none}
+.dwind svg path{fill:var(--ink);fill-opacity:.7}
+@media (max-width:420px){.day{grid-template-columns:62px 30px minmax(0,1fr) 42px 44px;gap:7px;padding-inline:2px}.dicon svg{width:30px;height:30px}.drange{grid-template-columns:30px minmax(0,1fr) 30px;gap:6px}.dwind svg{display:none}}
+
+.panel{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.tile{background:var(--surface);padding:14px 14px 13px;display:flex;flex-direction:column;gap:4px;min-height:124px;min-width:0}
+.tile.wide{grid-column:1/-1}
+.tl{font:500 10.5px var(--f-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.tv{font-family:var(--f-display);font-weight:600;font-size:36px;line-height:1;letter-spacing:.01em;font-variant-numeric:tabular-nums;margin-top:4px}
+.tv small{font:500 13px var(--f-mono);color:var(--muted);margin-left:4px;letter-spacing:0}
+.ts{font-size:13px;color:var(--muted);line-height:1.35}
+.ts b{color:var(--ink);font-weight:600}
+.trow{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.compass{width:64px;height:64px;flex:none}
+.compass .ring{fill:none;stroke:var(--line);stroke-width:1.5}
+.compass text{font:500 8.5px var(--f-mono);fill:var(--muted);text-anchor:middle;dominant-baseline:middle}
+.compass .arr{fill:var(--accent)}
+.meter{position:relative;height:6px;border-radius:3px;margin-top:8px;background:linear-gradient(90deg,#3FA34D 0%,#E8C531 25%,#EB8A2A 52%,#D9412F 72%,#8E3BA8 100%)}
+.meter i{position:absolute;top:-4px;width:3px;height:14px;border-radius:2px;background:var(--ink);transform:translateX(-50%)}
+.aqm{background:linear-gradient(90deg,#4FB6A8 0%,#5CC08A 20%,#E8C531 40%,#EB8A2A 60%,#D9412F 80%,#8E3BA8 100%)}
+.sunpath{width:100%;height:auto;display:block;margin-top:6px}
+.sp-h{stroke:var(--muted);stroke-width:1;opacity:.5}
+.sp-curve{fill:none;stroke:var(--sun);stroke-width:2}
+.sp-day{fill:var(--sun);fill-opacity:.18}
+.sp-night{fill:none;stroke:var(--muted);stroke-width:1.4;stroke-dasharray:2 3;opacity:.7}
+.sp-dot{fill:var(--sun);stroke:var(--surface);stroke-width:2}
+.sp-t{font:500 9.5px var(--f-mono);fill:var(--muted)}
+.dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:4px}
+.dl div{display:flex;flex-direction:column;min-width:0}
+.dl b{font-family:var(--f-display);font-weight:600;font-size:26px;line-height:1.05;font-variant-numeric:tabular-nums}
+
+.foot{padding-block:22px 34px;color:var(--muted);font-size:12.5px;display:flex;flex-direction:column;gap:6px}
+.foot p{margin:0;max-width:80ch}
+.foot a{color:var(--ink)}
+.toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:14px;z-index:50;max-width:calc(100% - 32px);box-shadow:0 10px 30px rgba(0,0,0,.25)}
+
+@media (max-width:560px){
+  .controls{flex-basis:100%;justify-content:stretch}
+  .search{max-width:none}
+  .windbadge svg{width:46px;height:46px}
+  .wb-text b{font-size:24px}
+  .place h1{font-size:19px}
+  .cond b{font-size:16px}
+  .cond span{font-size:13px}
+}
+@media (prefers-reduced-motion: reduce){ .windbadge .wb-arrow{transition:none} }
+</style>
+
+<div class="stage" id="stage">
+  <div class="sky" id="sky">
+    <canvas id="gl" role="img" aria-label="3D view of the weather over a small fjord landscape. Drag sideways to turn it."></canvas>
+  </div>
+  <div class="stage-top">
+    <div class="wrap topbar">
+      <div class="brand">
+        <span class="logo">Fjordvær</span>
+        <span class="chip" id="status" data-mode="loading"><i></i><span id="statusText">Loading</span></span>
+      </div>
+      <div class="controls">
+        <div class="search">
+          <svg class="sicon" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="M13 13l4.2 4.2"/></svg>
+          <input id="q" type="search" placeholder="Search for a place" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-controls="results" aria-autocomplete="list" aria-label="Search for a place">
+          <ul id="results" class="results" role="listbox" hidden></ul>
+        </div>
+        <button class="sbtn" id="locBtn" type="button" aria-label="Use my location" title="Use my location">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="5"/><path d="M10 1.5v3M10 15.5v3M1.5 10h3M15.5 10h3"/></svg>
+        </button>
+        <button class="sbtn" id="tempUnit" type="button" title="Switch temperature unit">°C</button>
+        <button class="sbtn" id="windUnit" type="button" title="Switch wind unit">m/s</button>
+      </div>
+    </div>
+  </div>
+  <div class="stage-bottom">
+    <div class="wrap nowrow">
+      <div class="now">
+        <div class="place"><h1 id="placeName">Narvik</h1><span id="placeSub">Nordland, Norway</span></div>
+        <div class="templine">
+          <span class="bigtemp" id="bigTemp">–</span>
+          <div class="cond"><b id="condText">Loading forecast</b><span id="condSub"></span></div>
+        </div>
+        <div class="when"><span id="timeLabel"></span><span class="biome" id="biomeLabel"></span></div>
+      </div>
+      <div class="windbadge" id="windBadge" aria-label="Wind">
+        <svg viewBox="-30 -30 60 60" aria-hidden="true">
+          <circle class="wb-ring" r="26"/>
+          <text class="wb-n" x="0" y="-18.5" text-anchor="middle" dominant-baseline="middle">N</text>
+          <path class="wb-arrow" id="wbArrow" d="M0 -15 L7 6 L0 2 L-7 6 Z"/>
+        </svg>
+        <div class="wb-text"><b id="wbSpeed">–</b><span id="wbName"></span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="notice" id="notice" hidden>
+  <div class="wrap notice-in">
+    <span class="ndot" aria-hidden="true"></span>
+    <p id="noticeText"></p>
+    <button class="tbtn" id="retryBtn" type="button">Try live data again</button>
+  </div>
+</div>
+
+<section class="timeline" aria-labelledby="h48">
+  <div class="wrap">
+    <div class="tl-head">
+      <h2 id="h48">Next 48 hours</h2>
+      <div class="tl-ctrl">
+        <button class="tbtn" id="playBtn" type="button" aria-pressed="false"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 0.5 L9.5 5 L1 9.5 Z"/></svg><span>Play time-lapse</span></button>
+        <button class="tbtn" id="nowBtn" type="button">Now</button>
+      </div>
+    </div>
+    <div class="scrub">
+      <span>Scene time</span>
+      <input type="range" id="scrub" min="0" max="47" step="0.05" value="0" aria-label="Scene time, hours from now">
+      <output id="scrubOut" for="scrub">Now</output>
+    </div>
+    <div class="hours" id="hours"><svg id="hourSvg" role="img" aria-label="Hourly forecast chart"></svg></div>
+    <div class="hcap">Tap an hour to see it in 3D. Rows: weather, temperature, precipitation, wind speed. Arrows point where the wind blows.</div>
+  </div>
+</section>
+
+<main class="wrap grid">
+  <section aria-labelledby="h10">
+    <div class="sec-head"><h2 id="h10">10 days</h2><span class="mono" id="dayNote">Low · High · Precip · Wind</span></div>
+    <ol class="days" id="dayList"></ol>
+  </section>
+  <section aria-labelledby="hd">
+    <div class="sec-head"><h2 id="hd">Details</h2><span class="mono" id="detailWhen">Now</span></div>
+    <div class="panel" id="panel"></div>
+  </section>
+</main>
+
+<footer class="wrap foot">
+  <p id="footSource">Forecast data by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> under CC BY 4.0. Sunrise, sunset and the sun’s path are calculated in the page. The 3D landscape is picked from the place’s latitude, height above sea level, climate and population.</p>
+  <p id="footPlace" class="mono"></p>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+"use strict";
+/* ============================================================
+   Fjordvær — 3D weather app
+   Data: Open-Meteo forecast, geocoding and air-quality APIs (no key).
+   If outside requests are blocked, the app falls back to example data.
+   ============================================================ */
+
+const CFG = {
+  defaultPlace: { name: 'Narvik', sub: 'Nordland, Norway', lat: 68.4385, lon: 17.4272, tz: 'Europe/Oslo', pop: 14000, elev: 10 },
+  forecastURL: 'https://api.open-meteo.com/v1/forecast',
+  geocodeURL: 'https://geocoding-api.open-meteo.com/v1/search',
+  airURL: 'https://air-quality-api.open-meteo.com/v1/air-quality',
+  refreshMs: 15 * 60e3,
+  timeoutMs: 9000,
+  hoursShown: 48,
+  playHoursPerSecond: 2
+};
+
+const GAZ = [ // name, region, lat, lon, time zone, population, elevation m, landscape hint
+  ['Narvik', 'Nordland, Norway', 68.4385, 17.4272, 'Europe/Oslo', 14000, 10],
+  ['Oslo', 'Norway', 59.9139, 10.7522, 'Europe/Oslo', 709000, 23],
+  ['Zermatt', 'Valais, Switzerland', 46.0207, 7.7491, 'Europe/Zurich', 5800, 1608],
+  ['Santorini', 'South Aegean, Greece', 36.4166, 25.4323, 'Europe/Athens', 15500, 180],
+  ['Merzouga', 'Drâa-Tafilalet, Morocco', 31.0998, -4.0118, 'Africa/Casablanca', 4000, 700, 'desert'],
+  ['Phuket', 'Thailand', 7.8804, 98.3923, 'Asia/Bangkok', 80000, 10],
+  ['Bruges', 'West Flanders, Belgium', 51.2093, 3.2247, 'Europe/Brussels', 118000, 10],
+  ['Tokyo', 'Japan', 35.6762, 139.6503, 'Asia/Tokyo', 13960000, 40],
+  ['New York', 'New York, United States', 40.7128, -74.0060, 'America/New_York', 8336000, 10],
+  ['Longyearbyen', 'Svalbard', 78.2232, 15.6267, 'Arctic/Longyearbyen', 2400, 10],
+  ['Tromsø', 'Troms, Norway', 69.6492, 18.9553, 'Europe/Oslo', 77000, 10],
+  ['Bodø', 'Nordland, Norway', 67.2804, 14.4049, 'Europe/Oslo', 53000, 10],
+  ['Svolvær', 'Lofoten, Norway', 68.2343, 14.5683, 'Europe/Oslo', 4700, 10],
+  ['Trondheim', 'Trøndelag, Norway', 63.4305, 10.3951, 'Europe/Oslo', 212000, 10],
+  ['Bergen', 'Vestland, Norway', 60.3913, 5.3221, 'Europe/Oslo', 285000, 10],
+  ['Stavanger', 'Rogaland, Norway', 58.9700, 5.7331, 'Europe/Oslo', 145000, 10],
+  ['Kiruna', 'Norrbotten, Sweden', 67.8558, 20.2253, 'Europe/Stockholm', 18000, 530],
+  ['Stockholm', 'Sweden', 59.3293, 18.0686, 'Europe/Stockholm', 975000, 28],
+  ['Copenhagen', 'Denmark', 55.6761, 12.5683, 'Europe/Copenhagen', 660000, 10],
+  ['Reykjavík', 'Iceland', 64.1466, -21.9426, 'Atlantic/Reykjavik', 140000, 20],
+  ['Nice', 'Provence-Alpes-Côte d’Azur, France', 43.7102, 7.2620, 'Europe/Paris', 342000, 10],
+  ['London', 'England, United Kingdom', 51.5072, -0.1276, 'Europe/London', 8900000, 20],
+  ['Dubai', 'United Arab Emirates', 25.2048, 55.2708, 'Asia/Dubai', 3600000, 5],
+  ['Sydney', 'New South Wales, Australia', -33.8688, 151.2093, 'Australia/Sydney', 5300000, 30]
+].map(([name, sub, lat, lon, tz, pop, elev, biome]) => ({ name, sub, lat, lon, tz, pop, elev, biome }));
+
+/* ---------- small utils ---------- */
+const $ = (id) => document.getElementById(id);
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const RAD = Math.PI / 180;
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('fjordvaer.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('fjordvaer.' + k, JSON.stringify(v)); } catch (e) {} }
+};
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function setText(el, v) { if (el && el.textContent !== v) el.textContent = v; }
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+/* ---------- time zones ---------- */
+const fmtCache = {};
+function safeTZ(tz) { try { new Intl.DateTimeFormat('en-GB', { timeZone: tz }); return tz; } catch (e) { return 'UTC'; } }
+function F(tz, opts) {
+  const key = tz + JSON.stringify(opts);
+  return fmtCache[key] || (fmtCache[key] = new Intl.DateTimeFormat('en-GB', Object.assign({ timeZone: tz }, opts)));
+}
+function parts(ms, tz) {
+  const o = {};
+  F(tz, { hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    .formatToParts(new Date(ms)).forEach(p => { o[p.type] = p.value; });
+  return o;
+}
+function tzOffset(ms, tz) {
+  const o = parts(ms, tz);
+  const asUTC = Date.UTC(+o.year, +o.month - 1, +o.day, (+o.hour) % 24, +o.minute, +o.second);
+  return asUTC - Math.floor(ms / 1000) * 1000;
+}
+function localMidnight(ms, tz) { const off = tzOffset(ms, tz); return Math.floor((ms + off) / 864e5) * 864e5 - off; }
+function dateKey(ms, tz) { const o = parts(ms, tz); return o.year + '-' + o.month + '-' + o.day; }
+function localHour(ms, tz) { return (+parts(ms, tz).hour) % 24; }
+function localMonth(ms, tz) { return +parts(ms, tz).month - 1; }
+const fHM = (ms, tz) => F(tz, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(ms));
+const fHH = (ms, tz) => F(tz, { hour: '2-digit', hourCycle: 'h23' }).format(new Date(ms));
+const fWD = (ms, tz) => F(tz, { weekday: 'short' }).format(new Date(ms));
+const fDM = (ms, tz) => F(tz, { day: 'numeric', month: 'short' }).format(new Date(ms));
+
+/* ---------- astronomy (sun position, sunrise/sunset, moon age) ---------- */
+function sunPos(ms, lat, lon) {
+  const d = ms / 86400000 - 10957.5;               // days since J2000.0
+  const g = (357.529 + 0.98560028 * d) * RAD;
+  const q = 280.459 + 0.98564736 * d;
+  const L = (q + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) * RAD;
+  const e = (23.439 - 0.00000036 * d) * RAD;
+  const ra = Math.atan2(Math.cos(e) * Math.sin(L), Math.cos(L));
+  const dec = Math.asin(Math.sin(e) * Math.sin(L));
+  const gmst = 280.46061837 + 360.98564736629 * d;
+  const H = (gmst + lon) * RAD - ra;
+  const phi = lat * RAD;
+  const alt = Math.asin(Math.sin(phi) * Math.sin(dec) + Math.cos(phi) * Math.cos(dec) * Math.cos(H));
+  const az = Math.atan2(-Math.sin(H), Math.tan(dec) * Math.cos(phi) - Math.sin(phi) * Math.cos(H));
+  return { alt: alt / RAD, az: ((az / RAD) % 360 + 360) % 360 };
+}
+function sunEvents(dayStart, lat, lon) {
+  const step = 5 * 60e3, H0 = -0.833;
+  let prev = sunPos(dayStart, lat, lon).alt, rise = null, set = null, maxA = prev, maxT = dayStart, minA = prev;
+  for (let t = dayStart + step; t <= dayStart + 864e5; t += step) {
+    const a = sunPos(t, lat, lon).alt;
+    if (prev < H0 && a >= H0 && rise === null) rise = t - step + step * (H0 - prev) / (a - prev);
+    if (prev >= H0 && a < H0 && set === null) set = t - step + step * (H0 - prev) / (a - prev);
+    if (a > maxA) { maxA = a; maxT = t; }
+    if (a < minA) minA = a;
+    prev = a;
+  }
+  let len, state = 'normal';
+  if (rise === null && set === null) { state = maxA > H0 ? 'midnightsun' : 'polarnight'; len = state === 'midnightsun' ? 864e5 : 0; }
+  else if (rise !== null && set !== null && set > rise) len = set - rise;
+  else if (rise !== null && set === null) len = dayStart + 864e5 - rise;
+  else if (set !== null && rise === null) len = set - dayStart;
+  else len = (dayStart + 864e5 - rise) + (set - dayStart);
+  return { rise, set, len, state, maxA, maxT, minA };
+}
+function moonAge(ms) { const syn = 29.530588853, nm = Date.UTC(2000, 0, 6, 18, 14); let a = ((ms - nm) / 864e5) % syn; if (a < 0) a += syn; return a; }
+
+/* ---------- weather codes (WMO, as used by Open-Meteo) ---------- */
+const WMO = {
+  0: ['Clear sky', 'clear'], 1: ['Mainly clear', 'fair'], 2: ['Partly cloudy', 'partly'], 3: ['Overcast', 'cloudy'],
+  45: ['Fog', 'fog'], 48: ['Rime fog', 'fog'],
+  51: ['Light drizzle', 'drizzle'], 53: ['Drizzle', 'drizzle'], 55: ['Dense drizzle', 'drizzle'],
+  56: ['Freezing drizzle', 'sleet'], 57: ['Freezing drizzle', 'sleet'],
+  61: ['Light rain', 'rain'], 63: ['Rain', 'rain'], 65: ['Heavy rain', 'heavyrain'],
+  66: ['Freezing rain', 'sleet'], 67: ['Heavy freezing rain', 'sleet'],
+  71: ['Light snow', 'snow'], 73: ['Snow', 'snow'], 75: ['Heavy snow', 'heavysnow'], 77: ['Snow grains', 'snow'],
+  80: ['Light showers', 'showers'], 81: ['Rain showers', 'showers'], 82: ['Violent showers', 'heavyrain'],
+  85: ['Snow showers', 'snowshowers'], 86: ['Heavy snow showers', 'heavysnow'],
+  95: ['Thunderstorm', 'thunder'], 96: ['Thunderstorm, hail', 'thunder'], 99: ['Thunderstorm, heavy hail', 'thunder']
+};
+const codeLabel = c => (WMO[c] || WMO[3])[0];
+const codeKind = c => (WMO[c] || WMO[3])[1];
+const SEVERITY = c => c >= 95 ? 10 : [65, 75, 82, 86].includes(c) ? 8 : [56, 57, 66, 67].includes(c) ? 7 : [63, 73, 81, 85].includes(c) ? 6 : [61, 71, 77, 80].includes(c) ? 5 : c >= 51 ? 4 : c >= 45 ? 3 : c;
+
+/* ---------- icons (32×32 viewBox) ---------- */
+function icSun(cx, cy, r) {
+  let rays = '';
+  for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4, c = Math.cos(a), s = Math.sin(a); rays += `<line x1="${(cx + c * (r + 2.3)).toFixed(1)}" y1="${(cy + s * (r + 2.3)).toFixed(1)}" x2="${(cx + c * (r + 5)).toFixed(1)}" y2="${(cy + s * (r + 5)).toFixed(1)}"/>`; }
+  return `<g class="i-sun"><circle cx="${cx}" cy="${cy}" r="${r}" stroke="none"/>${rays}</g>`;
+}
+function icMoon(cx, cy, r) { const x = cx + r * 0.25; return `<path class="i-moon" d="M${x} ${cy - r}A${r} ${r} 0 0 0 ${x} ${cy + r}A${r * 1.25} ${r * 1.25} 0 0 1 ${x} ${cy - r}Z"/>`; }
+function icCloud(x, y, s, dark) { return `<g class="i-cloud${dark ? ' d' : ''}" transform="translate(${x} ${y}) scale(${s})"><circle cx="7" cy="10" r="4.5"/><circle cx="12.2" cy="7" r="6"/><circle cx="17.6" cy="10" r="4.4"/><rect x="7" y="9.6" width="10.6" height="4.9" rx="1"/></g>`; }
+function icDrops(n, y0) { let s = ''; const xs = n === 2 ? [12, 19] : n === 3 ? [9.5, 15.5, 21.5] : [7.5, 12.5, 17.5, 22.5]; xs.forEach((x, i) => { const yy = y0 + (i % 2) * 1.6; s += `<line class="i-rain" x1="${x}" y1="${yy}" x2="${x - 2}" y2="${yy + 5}"/>`; }); return s; }
+function icFlakes(n, y0) { let s = ''; const pts = n <= 2 ? [[12, y0 + 2], [19, y0 + 4]] : n === 3 ? [[9.5, y0 + 2], [16, y0 + 4.5], [22, y0 + 2]] : [[8, y0 + 1.5], [13.5, y0 + 4.5], [19, y0 + 1.5], [24, y0 + 4.5], [11, y0 + 8]]; pts.forEach(([x, y]) => { s += `<circle class="i-flake" cx="${x}" cy="${y}" r="1.7"/>`; }); return s; }
+function iconSVG(code, isDay, cls) {
+  const k = codeKind(code), lum = (cx, cy, r) => isDay ? icSun(cx, cy, r) : icMoon(cx, cy, r);
+  let s = '';
+  switch (k) {
+    case 'clear': s = lum(16, 16, isDay ? 6.5 : 8.5); break;
+    case 'fair': s = lum(13, 12.5, isDay ? 6 : 7.5) + icCloud(11, 13, 0.82); break;
+    case 'partly': s = lum(11, 10.5, isDay ? 5.5 : 7) + icCloud(5, 10, 1.08); break;
+    case 'cloudy': s = icCloud(9, 3, 0.9, true) + icCloud(2, 9, 1.2); break;
+    case 'fog': s = icCloud(4, 2, 1.05) + '<line class="i-fog" x1="5" y1="22" x2="27" y2="22"/><line class="i-fog" x1="8" y1="26" x2="24" y2="26"/><line class="i-fog" x1="5" y1="30" x2="22" y2="30"/>'; break;
+    case 'drizzle': s = icCloud(4, 3, 1.05) + '<circle class="i-flake" cx="11" cy="23" r="1.3" style="fill:var(--rain)"/><circle class="i-flake" cx="17" cy="25.5" r="1.3" style="fill:var(--rain)"/><circle class="i-flake" cx="23" cy="23" r="1.3" style="fill:var(--rain)"/>'; break;
+    case 'rain': s = icCloud(4, 3, 1.05) + icDrops(3, 21); break;
+    case 'heavyrain': s = icCloud(4, 3, 1.05, true) + icDrops(4, 21); break;
+    case 'showers': s = lum(10, 9, isDay ? 4.6 : 6) + icCloud(6, 7, 0.95) + icDrops(2, 23); break;
+    case 'sleet': s = icCloud(4, 3, 1.05) + '<line class="i-rain" x1="11" y1="21" x2="9" y2="26"/>' + '<circle class="i-flake" cx="17" cy="24" r="1.7"/><circle class="i-flake" cx="23" cy="22.5" r="1.7"/>'; break;
+    case 'snow': s = icCloud(4, 3, 1.05) + icFlakes(3, 21); break;
+    case 'heavysnow': s = icCloud(4, 3, 1.05, true) + icFlakes(5, 20.5); break;
+    case 'snowshowers': s = lum(10, 9, isDay ? 4.6 : 6) + icCloud(6, 7, 0.95) + icFlakes(2, 22); break;
+    case 'thunder': s = icCloud(4, 2, 1.05, true) + '<path class="i-bolt" d="M17 17 L11.5 25 L15.5 25 L13.5 31 L20.5 22 L16.5 22 L18.5 17 Z"/>' + '<line class="i-rain" x1="8" y1="20" x2="6.5" y2="24"/><line class="i-rain" x1="24" y1="20" x2="22.5" y2="24"/>'; break;
+  }
+  return `<svg viewBox="0 0 32 32" ${cls ? `class="${cls}"` : ''} aria-hidden="true">${s}</svg>`;
+}
+
+/* ---------- units & formatting ---------- */
+const WIND_UNITS = { ms: ['m/s', 1], kmh: ['km/h', 3.6], mph: ['mph', 2.236936], kn: ['kn', 1.943844] };
+const WIND_ORDER = ['ms', 'kmh', 'mph', 'kn'];
+const U = Object.assign({ temp: 'C', wind: 'ms' }, store.get('units', {}));
+if (!WIND_UNITS[U.wind]) U.wind = 'ms';
+const tConv = c => U.temp === 'F' ? c * 9 / 5 + 32 : c;
+function fT(c, deg = true) { if (c == null || isNaN(c)) return '–'; const r = Math.round(tConv(c)); return (r < 0 ? '−' : '') + Math.abs(r) + (deg ? '°' : ''); }
+const tCls = c => (c != null && c < 0) ? 'cold' : 'warm';
+const fW = ms => ms == null ? '–' : String(Math.round(ms * WIND_UNITS[U.wind][1]));
+const wU = () => WIND_UNITS[U.wind][0];
+function fP(mm) { if (mm == null) return '–'; if (U.temp === 'F') { const i = mm / 25.4; return i >= 1 ? i.toFixed(1) : i.toFixed(2); } return mm >= 10 ? mm.toFixed(0) : mm.toFixed(1); }
+const pU = () => U.temp === 'F' ? 'in' : 'mm';
+function fVis(m) { if (m == null) return ['–', '']; if (U.temp === 'F') { const mi = m / 1609.34; return [mi >= 10 ? Math.round(mi) + '' : mi.toFixed(1), 'mi']; } const km = m / 1000; return [km >= 10 ? Math.round(km) + '' : km.toFixed(1), 'km']; }
+const COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+const compass = deg => COMPASS[Math.round(((deg % 360) + 360) % 360 / 22.5) % 16];
+const BF_LIMITS = [0.3, 1.6, 3.4, 5.5, 8.0, 10.8, 13.9, 17.2, 20.8, 24.5, 28.5, 32.7];
+const BF_EN = ['Calm', 'Light air', 'Light breeze', 'Gentle breeze', 'Moderate breeze', 'Fresh breeze', 'Strong breeze', 'Near gale', 'Gale', 'Strong gale', 'Storm', 'Violent storm', 'Hurricane force'];
+const BF_NO = ['stille', 'flau vind', 'svak vind', 'lett bris', 'laber bris', 'frisk bris', 'liten kuling', 'stiv kuling', 'sterk kuling', 'liten storm', 'full storm', 'sterk storm', 'orkan'];
+function beaufort(ms) { let f = 0; while (f < 12 && ms >= BF_LIMITS[f]) f++; return f; }
+function uvLabel(u) { return u < 3 ? 'Low' : u < 6 ? 'Moderate' : u < 8 ? 'High' : u < 11 ? 'Very high' : 'Extreme'; }
+function aqiLabel(a) { return a < 20 ? 'Good' : a < 40 ? 'Fair' : a < 60 ? 'Moderate' : a < 80 ? 'Poor' : a < 100 ? 'Very poor' : 'Extremely poor'; }
+function fDur(ms) { const m = Math.round(ms / 60000); return Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0') + ' min'; }
+function windChill(t, ms) { const v = ms * 3.6; if (t > 10 || v < 4.8) return t; const p = Math.pow(v, 0.16); return 13.12 + 0.6215 * t - 11.37 * p + 0.3965 * t * p; }
+function dewPoint(t, rh) { const a = 17.62, b = 243.12, g = Math.log(Math.max(rh, 1) / 100) + a * t / (b + t); return b * g / (a - g); }
+
+/* ============================================================
+   DATA
+   ============================================================ */
+let D = null;          // prepared dataset
+let MODE = 'loading';  // 'live' | 'example' | 'loading'
+let PLACE = Object.assign({}, CFG.defaultPlace, store.get('place', {}));
+PLACE.tz = safeTZ(PLACE.tz || 'UTC');
+
+async function getJSON(url) {
+  const ctl = new AbortController();
+  const tm = setTimeout(() => ctl.abort(), CFG.timeoutMs);
+  try {
+    const r = await fetch(url, { signal: ctl.signal });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return await r.json();
+  } finally { clearTimeout(tm); }
+}
+
+async function fetchLive(place) {
+  const p = new URLSearchParams({
+    latitude: place.lat.toFixed(4), longitude: place.lon.toFixed(4), timezone: 'auto', timeformat: 'unixtime',
+    forecast_days: '10', wind_speed_unit: 'ms',
+    current: 'temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m',
+    hourly: 'temperature_2m,apparent_temperature,relative_humidity_2m,dew_point_2m,precipitation_probability,precipitation,weather_code,cloud_cover,pressure_msl,visibility,wind_speed_10m,wind_direction_10m,wind_gusts_10m,uv_index',
+    daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,uv_index_max'
+  });
+  const j = await getJSON(CFG.forecastURL + '?' + p);
+  const tz = safeTZ(j.timezone || place.tz || 'UTC');
+  const h = j.hourly, d = j.daily, c = j.current || {};
+  const at = (arr, i) => arr && arr[i] != null ? arr[i] : null;
+  const hourly = h.time.map((t, i) => ({
+    t: t * 1000, temp: at(h.temperature_2m, i), feels: at(h.apparent_temperature, i), rh: at(h.relative_humidity_2m, i),
+    dew: at(h.dew_point_2m, i), pp: at(h.precipitation_probability, i), precip: at(h.precipitation, i) ?? 0,
+    code: at(h.weather_code, i) ?? 3, cloud: at(h.cloud_cover, i) ?? 50, pres: at(h.pressure_msl, i), vis: at(h.visibility, i),
+    wind: at(h.wind_speed_10m, i) ?? 0, dir: at(h.wind_direction_10m, i) ?? 0, gust: at(h.wind_gusts_10m, i), uv: at(h.uv_index, i)
+  })).filter(r => r.temp != null);
+  const daily = d.time.map((t, i) => ({
+    start: t * 1000, code: at(d.weather_code, i) ?? 3, tmax: at(d.temperature_2m_max, i), tmin: at(d.temperature_2m_min, i),
+    psum: at(d.precipitation_sum, i) ?? 0, ppmax: at(d.precipitation_probability_max, i), wmax: at(d.wind_speed_10m_max, i) ?? 0,
+    gmax: at(d.wind_gusts_10m_max, i), wdir: at(d.wind_direction_10m_dominant, i) ?? 0, uvmax: at(d.uv_index_max, i)
+  })).filter(r => r.tmax != null);
+  const current = {
+    temp: c.temperature_2m, feels: c.apparent_temperature, rh: c.relative_humidity_2m, precip: c.precipitation,
+    code: c.weather_code, cloud: c.cloud_cover, pres: c.pressure_msl, wind: c.wind_speed_10m, dir: c.wind_direction_10m, gust: c.wind_gusts_10m
+  };
+  return { place: Object.assign({}, place, { tz, elev: place.elev ?? j.elevation }), tz, hourly, daily, current, air: null, live: true, updated: Date.now() };
+}
+
+async function fetchAir(place) {
+  const p = new URLSearchParams({ latitude: place.lat.toFixed(4), longitude: place.lon.toFixed(4), current: 'european_aqi,pm2_5,pm10', timezone: 'auto' });
+  const j = await getJSON(CFG.airURL + '?' + p);
+  const c = j.current || {};
+  if (c.european_aqi == null) return null;
+  return { aqi: c.european_aqi, pm25: c.pm2_5, pm10: c.pm10 };
+}
+
+async function geocode(q) {
+  const p = new URLSearchParams({ name: q, count: '7', language: 'en', format: 'json' });
+  const j = await getJSON(CFG.geocodeURL + '?' + p);
+  return (j.results || []).map(r => ({
+    name: r.name, sub: [r.admin1, r.country].filter(Boolean).join(', '),
+    lat: r.latitude, lon: r.longitude, tz: safeTZ(r.timezone || 'UTC'), pop: r.population || 0, elev: r.elevation
+  }));
+}
+
+/* ---- Example data: a realistic made-up weather story, clearly labeled in the UI ---- */
+const STORY = [ // [hours from now, code, cloud %, precip mm/h, wind m/s, wind from °, temp offset °C]
+  [-24, 2, 45, 0, 4, 200, 0], [3, 3, 88, 0, 6, 215, 0.4], [8, 61, 100, 0.4, 8, 225, 0], [10, 63, 100, 1.6, 10, 232, -0.4],
+  [12, 95, 100, 3.0, 14, 240, -0.9], [13, 63, 100, 1.2, 11, 246, -1.5], [15, 73, 100, 0.9, 10, 262, -3.2],
+  [20, 85, 72, 0.3, 8, 290, -3.6], [24, 2, 40, 0, 5, 320, -4.2], [27, 0, 6, 0, 3, 110, -5], [31, 45, 100, 0, 1, 90, -5.4],
+  [35, 1, 16, 0, 2, 120, -3.2], [42, 2, 42, 0, 4, 150, -2], [48, 3, 86, 0, 5, 180, -1], [56, 80, 72, 0.6, 7, 200, 0],
+  [66, 2, 50, 0, 4, 210, 0.4], [80, 0, 10, 0, 3, 100, -1.2], [104, 3, 90, 0, 5, 190, 0.5], [120, 61, 100, 0.8, 8, 220, 1],
+  [140, 71, 95, 0.5, 6, 300, -2], [160, 1, 20, 0, 3, 90, -3], [184, 2, 50, 0, 4, 160, -1], [208, 63, 100, 0.8, 9, 230, 1],
+  [230, 3, 80, 0, 5, 250, 0]
+];
+const R2S = { 51: 71, 53: 71, 55: 73, 61: 71, 63: 73, 65: 75, 80: 85, 81: 85, 82: 86 };
+const S2R = { 71: 61, 73: 63, 75: 65, 77: 61, 85: 80, 86: 81 };
+function lerpAngle(a, b, t) { const d = ((b - a + 540) % 360) - 180; return (a + d * t + 360) % 360; }
+
+function exampleData(place) {
+  const tz = safeTZ(place.tz || 'UTC');
+  const now = Date.now();
+  const start = localMidnight(now, tz);
+  const nowIdx = Math.floor((now - start) / 3600e3);
+  const rnd = mulberry32(Math.round(Math.abs(place.lat * 1000 + place.lon * 77)) + 11);
+  const month = localMonth(now, tz);
+  const m = place.lat < 0 ? (month + 6) % 12 : month;
+  const seasonal = Math.cos((m - 6.4) / 12 * 2 * Math.PI);
+  const alat = Math.abs(place.lat);
+  const base = 29 - alat * 0.40 + seasonal * (3 + alat * 0.17);
+  const dry = classify(place, null) === 'desert';
+  const diAmp = dry ? 8 : alat > 60 ? 1.6 : 3.4;
+  const hourly = [];
+  for (let i = 0; i < 240; i++) {
+    const t = start + i * 3600e3, rel = i - nowIdx;
+    let k = 0; while (k < STORY.length - 1 && STORY[k + 1][0] <= rel) k++;
+    const A = STORY[k], B = STORY[Math.min(k + 1, STORY.length - 1)];
+    const q = A === B ? 0 : clamp((rel - A[0]) / Math.max(1, B[0] - A[0]), 0, 1);
+    const L = ix => lerp(A[ix], B[ix], q * q);
+    const lh = localHour(t, tz);
+    const temp = base + L(6) + diAmp * Math.sin((lh - 9) / 24 * 2 * Math.PI) + (rnd() - 0.5) * 0.4;
+    let code = A[1];
+    if (dry) code = code >= 45 ? (A[2] > 80 ? 2 : 1) : code;
+    if (temp < -0.5 && R2S[code]) code = R2S[code];
+    if (temp > 2.5 && S2R[code]) code = S2R[code];
+    const cloud = clamp(lerp(A[2], B[2], smooth(B[0] - 3, B[0], rel) * 0.7) * (dry ? 0.3 : 1) + (rnd() - 0.5) * 8, 0, 100);
+    const precip = code >= 51 ? Math.max(0.1, A[3] * (0.7 + rnd() * 0.6)) : 0;
+    const wind = Math.max(0.3, L(4) * (0.85 + rnd() * 0.3));
+    const dir = lerpAngle(A[5], B[5], q);
+    const rh = dry ? clamp(18 + cloud * 0.15 + (lh < 7 ? 10 : 0), 8, 45) : clamp(68 + cloud * 0.22 + (precip > 0 ? 10 : 0) + (code === 45 ? 25 : 0) - (lh > 11 && lh < 17 ? 7 : 0), 30, 100);
+    const sp = sunPos(t + 1800e3, place.lat, place.lon);
+    const kind = codeKind(code);
+    const vis = code === 45 ? 300 : kind === 'heavysnow' ? 1200 : kind === 'snow' || kind === 'snowshowers' ? 3500 : kind === 'heavyrain' || kind === 'thunder' ? 6000 : precip > 0 ? 14000 : 32000;
+    hourly.push({
+      t, temp, feels: windChill(temp, wind), rh, dew: dewPoint(temp, rh),
+      pp: precip > 0 ? clamp(Math.round(55 + precip * 18), 0, 98) : cloud > 85 ? 12 : 2, precip, code, cloud,
+      pres: 1011 - 9 * Math.exp(-Math.pow((rel - 12) / 9, 2)) + 5 * smooth(14, 40, rel) - 4 * Math.exp(-Math.pow((rel - 120) / 14, 2)) - 5 * Math.exp(-Math.pow((rel - 208) / 12, 2)),
+      vis, wind, dir, gust: wind * (1.45 + rnd() * 0.3),
+      uv: Math.round(Math.pow(Math.max(0, Math.sin(sp.alt * RAD)), 1.3) * 10 * (1 - 0.75 * cloud / 100) * 10) / 10
+    });
+  }
+  // daily from hourly
+  const groups = new Map();
+  hourly.forEach(r => { const k = dateKey(r.t, tz); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); });
+  const todayKey = dateKey(now, tz);
+  const daily = [];
+  for (const [key, rows] of groups) {
+    if (key < todayKey || rows.length < 6) continue;
+    const day = rows.filter(r => { const h = localHour(r.t, tz); return h >= 6 && h <= 21; });
+    const pool = day.length ? day : rows;
+    const wet = pool.filter(r => r.code >= 51);
+    let code;
+    if (wet.length >= 3) code = wet.reduce((a, r) => SEVERITY(r.code) > SEVERITY(a) ? r.code : a, wet[0].code);
+    else if (pool.filter(r => r.code === 45).length >= 4) code = 45;
+    else { const cc = pool.reduce((s, r) => s + r.cloud, 0) / pool.length; code = cc < 20 ? 0 : cc < 45 ? 1 : cc < 75 ? 2 : 3; }
+    const wmaxRow = rows.reduce((a, r) => r.wind > a.wind ? r : a, rows[0]);
+    daily.push({
+      start: localMidnight(rows[Math.min(3, rows.length - 1)].t, tz), code,
+      tmax: Math.max(...rows.map(r => r.temp)), tmin: Math.min(...rows.map(r => r.temp)),
+      psum: rows.reduce((s, r) => s + r.precip, 0), ppmax: Math.max(...rows.map(r => r.pp)),
+      wmax: wmaxRow.wind, gmax: Math.max(...rows.map(r => r.gust)), wdir: wmaxRow.dir, uvmax: Math.max(...rows.map(r => r.uv))
+    });
+  }
+  return { place: Object.assign({}, place, { tz }), tz, hourly, daily: daily.slice(0, 10), current: null, air: { aqi: 14, pm25: 3, pm10: 6 }, live: false, updated: now };
+}
+
+function prepare(d) {
+  const H = d.hourly, now = Date.now();
+  let i = 0; while (i < H.length - 1 && H[i + 1].t <= now) i++;
+  d.idxNow = i;
+  if (d.current) { // merge 15-minute "current" values into the now-hour
+    const c = d.current, r = H[i];
+    for (const k of ['temp', 'feels', 'rh', 'precip', 'code', 'cloud', 'pres', 'wind', 'dir', 'gust']) if (c[k] != null) r[k] = c[k];
+  }
+  d.daily.forEach(day => { day.sun = sunEvents(day.start, d.place.lat, d.place.lon); });
+  return d;
+}
+
+/* ---------- landscape type ---------- */
+const BIOME_LABEL = { nordic: 'Nordic', arctic: 'Arctic', temperate: 'Temperate', coast: 'Warm coast', desert: 'Desert', tropical: 'Tropical', mountain: 'Mountain', city: 'City' };
+const SEASONS = ['Winter', 'Spring', 'Summer', 'Autumn'];
+const seasonOf = m => (m === 11 || m <= 1) ? 0 : m <= 4 ? 1 : m <= 7 ? 2 : 3; // month already shifted for the southern hemisphere
+function classify(place, d) {
+  if (place.biome && BIOME_LABEL[place.biome]) return place.biome;
+  const alat = Math.abs(place.lat), elev = place.elev ?? 0, pop = place.pop ?? 0;
+  let meanT = null, meanRH = null, psum = null;
+  if (d && d.hourly && d.hourly.length) {
+    const H = d.hourly; meanT = 0; meanRH = 0; psum = 0;
+    H.forEach(r => { meanT += r.temp; meanRH += (r.rh ?? 70); psum += r.precip || 0; });
+    meanT /= H.length; meanRH /= H.length;
+  }
+  if (pop >= 1e6) return 'city';
+  if (elev >= 1200) return 'mountain';
+  if (alat >= 12 && alat <= 40 && meanRH != null && meanRH < 45 && psum < 5) return 'desert';
+  if (alat < 23.5 && (meanT == null || meanT > 18)) return 'tropical';
+  if (alat >= 70) return 'arctic';
+  if (alat >= 58) return 'nordic';
+  if (alat >= 23.5 && alat < 44.5 && (meanT == null || meanT > 9)) return 'coast';
+  return 'temperate';
+}
+function biomeText(key, monthShifted) {
+  const name = BIOME_LABEL[key] || 'Temperate';
+  return (key === 'desert' || key === 'tropical') ? name : `${name} · ${SEASONS[seasonOf(monthShifted)]}`;
+}
+
+/* ============================================================
+   3D SCENE
+   ============================================================ */
+const Scene = (() => {
+  if (!window.THREE) return { init() { return false; }, tick() {}, setTarget() {}, setTime() {}, setBiome() {}, ok: false };
+  const R = 10, WATER_Y = 0.06, REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let ok = false, renderer, scene, camera, skyEl, canvas;
+  // landscape (rebuilt when the place changes)
+  let land = null, B = null, landKey = '', OX = 0, OZ = 0;
+  let terrain, tCol, tH, tNy, tJit, tHash, tX, tZ, tWet, lastSnow = -99, lastMonth = -1;
+  let props = [], boats = [], occ = [], sockG = null, winMat = null, cityMats = [], cityRoof = null;
+  // world (built once)
+  let waterPos, waterBase, water, waterMat;
+  let sunMesh, sunGlow, sunLight, moonLight, hemi, amb, moon, moonMat, stars, starMat;
+  const clouds = [];
+  let rain, rainPos, rainMat, snow, snowPos, snowMat, snowPhase;
+  let bolt, boltPos, boltMat, boltLife = 0, nextStrike = 2.5, flash = 0;
+  const RAIN_N = 1800, SNOW_N = 1600, CLOUD_N = 13;
+  const st = { cloud: 0.4, rain: 0, snow: 0, storm: 0, fog: 0, wind: 4, wx: 0, wz: 1, temp: 3, snowline: 3.6, time: Date.now(), lat: 68.4, lon: 17.4, month: 9, south: false };
+  const tg = Object.assign({}, st);
+  let az = 0, az0 = 0, el = 0.36, dist = 34, targetY = 2.4, dragging = false, lastX = 0, lastY = 0, lastInteract = -1e9, visible = true, tAcc = 0, skyStr = '';
+  const C = (h) => new THREE.Color(h);
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const UPV = new THREE.Vector3(0, 1, 0);
+  const SNOWC = new THREE.Color('#EEF2F5');
+  const waterBaseColor = new THREE.Color('#2B5D77');
+
+  /* noise */
+  function hash(x, y) { let h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; return (h >>> 0) / 4294967296; }
+  function vnoise(x, y) { const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf); const a = hash(xi, yi), b = hash(xi + 1, yi), c = hash(xi, yi + 1), d = hash(xi + 1, yi + 1); return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v; }
+  function fbm(x, y) { let s = 0, a = 0.5, f = 1; for (let i = 0; i < 5; i++) { s += a * vnoise(x * f, y * f); f *= 2.03; a *= 0.5; } return s / 0.96875; }
+  function ridged(x, y) { let s = 0, a = 0.5, f = 1; for (let i = 0; i < 4; i++) { const v = 1 - Math.abs(vnoise(x * f, y * f) * 2 - 1); s += a * v * v; f *= 2.1; a *= 0.5; } return s / 0.9375; }
+  const N = (x, z) => fbm((x + OX) * 0.17 + 11.3, (z + OZ) * 0.17 - 4.1);
+  const RG = (x, z) => ridged((x + OX) * 0.13 + 3.7, (z + OZ) * 0.13 + 8.2);
+  const PATCH = (x, z) => fbm((x + OX) * 0.35 + 5, (z + OZ) * 0.35 + 9);
+
+  function heightAt(x, z) {
+    const r = Math.hypot(x, z) / R, h = B.h(x, z), wet = B.wet(x, z);
+    const fall = 1 - smooth(0.80, 1.0, r), rim = lerp(0.18, -0.4, wet);
+    return rim + (h - rim) * fall;
+  }
+  function normalY(x, z) { const e = 0.12, hx = heightAt(x + e, z) - heightAt(x - e, z), hz = heightAt(x, z + e) - heightAt(x, z - e); return 2 * e / Math.hypot(hx, 2 * e, hz); }
+  // scene axes: camera starts in the north (+Z) looking south. Azimuth A (deg from north, clockwise) → [x, z]
+  const dirVec = A => [-Math.sin(A * RAD), Math.cos(A * RAD)];
+
+  /* ---------- landscape types ---------- */
+  const fjordZ = x => 0.9 * Math.sin(x * 0.33 + 0.6) + 0.8;
+  const riverZ = x => 0.6 * Math.sin(x * 0.45 + 1.2) + 1.2;
+  const coastZ = x => 2.0 + 0.7 * Math.sin(x * 0.38 + 0.4);
+  const tropZ = x => 2.3 + 0.6 * Math.sin(x * 0.4 + 1.0);
+  const quayZ = x => 3.4 + 0.35 * Math.sin(x * 0.5);
+  const OASIS = [-2.2, 1.8], LAKE = [0.6, 1.8], CELL = 1.6, ROAD = 0.22;
+  const cellIx = v => Math.floor((v + 40) / CELL);
+  const isPark = (ix, iz) => hash(ix * 3 + 7, iz * 5 + 1) < 0.17;
+  const isRoad = (x, z) => { const gx = ((x + 40) % CELL + CELL) % CELL, gz = ((z + 40) % CELL + CELL) % CELL; return gx < ROAD || gz < ROAD; };
+  const VEG = {
+    nordic: m => m >= 5 && m <= 7 ? ['#4E7A33', '#5E8A3A'] : m === 8 ? ['#6F7E35', '#556F33'] : m === 9 ? ['#A17A2C', '#55693A'] : m === 4 ? ['#647A3C', '#6F6A4D'] : ['#6E6A55', '#5B5E4C'],
+    arctic: m => m >= 5 && m <= 8 ? ['#6E7A4A', '#7C7A55'] : ['#7A7258', '#6B6A55'],
+    temperate: m => [['#6F7258', '#7A735E'], ['#6E9A3E', '#7FA84A'], ['#5B8A35', '#6A9A3C'], ['#7E7A3A', '#8C6E3A']][seasonOf(m)],
+    coast: m => [['#6F8A45', '#7C8E4E'], ['#7E9446', '#8E9A55'], ['#A69458', '#8F8A52'], ['#8C8E50', '#7E8448']][seasonOf(m)],
+    green: m => [['#6F7258', '#77735E'], ['#7FA84A', '#6E9A3E'], ['#5E8E38', '#6D9A40'], ['#8F8A45', '#7E6E3A']][seasonOf(m)]
+  };
+  const FIELDS = [['#6F7258', '#7A735E', '#857A62', '#6A6E58'], ['#6E9A3E', '#8DBE52', '#7A8B3E', '#8E7C5A'], ['#5B8A35', '#B8A04A', '#7FA84A', '#C9B25A'], ['#8C6E3A', '#7E7A3A', '#9A7A4A', '#6E7A3A']];
+
+  const BIOMES = {
+    nordic: {
+      water: '#2B5D77', seed: 11,
+      h(x, z) {
+        const dz = z - fjordZ(x), valley = smooth(0.6, 2.8, Math.abs(dz)), n = N(x, z); let h;
+        if (dz < 0) { const far = Math.min(1, -dz / 6.5), rg = RG(x, z); h = 0.45 + n * 1.4 + far * (1.0 + rg * rg * 5.2); }
+        else h = 0.32 + n * 1.25 + Math.max(0, dz - 2.5) * 0.12;
+        return h * valley - (1 - valley) * 0.55;
+      },
+      wet: (x, z) => 1 - smooth(0.6, 2.8, Math.abs(z - fjordZ(x))),
+      ground(o, h, ny, wet, x, z, m, hs) {
+        if (h < WATER_Y + 0.1) o.set('#7D776A'); else if (ny < 0.62) o.set('#5E5A56'); else if (h > 3.1) o.set('#787564');
+        else o.set(VEG[this.veg || 'nordic'](m)[hs > 0.5 ? 0 : 1]);
+      },
+      props(rng) {
+        const arctic = this.veg === 'arctic';
+        const first = addHouses({ n: arctic ? 2 : 3, zone: (x, z, h, ny) => { const dz = z - fjordZ(x); return dz > 1.0 && dz < 3.6 && h < 1.3 && ny > 0.9; },
+          w: [0.75, 1.0], d: [0.55, 0.7], hgt: [0.5, 0.62], walls: arctic ? ['#9E2B23', '#3E5C76', '#C9A227'] : ['#9E2B23', '#B8862A', '#E8E2D6'], roofs: ['#5E6B35', '#3B3B3D'], roof: 'gable', roofH: 0.42 }, rng);
+        if (!arctic) addTrees('pine', 110, (x, z, h, ny) => h > WATER_Y + 0.18 && h < 2.6 && ny > 0.8 && PATCH(x, z) > 0.47, rng, 0.65, 1.3);
+        addBoats(1, rng); addSockNear(first, rng);
+      }
+    },
+    temperate: {
+      water: '#3D6A6E', seed: 23,
+      h(x, z) {
+        const dz = z - riverZ(x), valley = smooth(0.35, 1.1, Math.abs(dz)), n = N(x, z);
+        const h0 = 0.3 + n * 1.0 + (dz < 0 ? Math.min(1, -dz / 7) * (0.5 + RG(x, z) * 1.5) : 0.1 * Math.max(0, dz - 2));
+        return h0 * valley - (1 - valley) * 0.45;
+      },
+      wet: (x, z) => 1 - smooth(0.35, 1.1, Math.abs(z - riverZ(x))),
+      ground(o, h, ny, wet, x, z, m, hs) {
+        if (h < WATER_Y + 0.08) { o.set('#7A7360'); return; }
+        if (ny < 0.6) { o.set('#77736A'); return; }
+        if (h < 1.5 && ny > 0.86) { const f = hash(Math.floor((x * 0.8 + z * 0.25 + 40) / 1.3), Math.floor((z * 0.8 - x * 0.2 + 40) / 1.1)); o.set(FIELDS[seasonOf(m)][Math.floor(f * 4)]); return; }
+        o.set(VEG.temperate(m)[hs > 0.5 ? 0 : 1]);
+      },
+      props(rng) {
+        const first = addHouses({ n: 11, zone: (x, z, h, ny) => { const dz = z - riverZ(x); return dz > 0.8 && dz < 4 && h < 1.2 && ny > 0.9 && x > -7 && x < 4; },
+          w: [0.6, 0.95], d: [0.5, 0.7], hgt: [0.45, 0.7], walls: ['#E7DCC4', '#B5654A', '#D9CBA8', '#F0ECE4'], roofs: ['#8E3B2E', '#5A5B60', '#7A3A2A'], roof: 'gable', roofH: 0.5 }, rng);
+        addTrees('broad', 120, (x, z, h, ny) => h > WATER_Y + 0.15 && ny > 0.78 && PATCH(x, z) > 0.42, rng, 0.75, 1.3);
+        addTrees('pine', 30, (x, z, h, ny) => h > 1.5 && ny > 0.75, rng, 0.7, 1.2);
+        addBoats(1, rng, 0.75); addSockNear(first, rng);
+      }
+    },
+    coast: {
+      water: '#2876A0', seed: 37,
+      h(x, z) { const d = coastZ(x) - z; if (d < 0) return Math.max(-0.6, 0.12 + d * 0.55); const n = N(x, z), rg = RG(x, z); return 0.12 + smooth(0, 1.2, d) * 0.25 + Math.max(0, d - 1) * 0.2 * (0.6 + n) + rg * rg * 1.8 * smooth(3, 8, d); },
+      wet: (x, z) => 1 - smooth(-0.15, 0.35, coastZ(x) - z),
+      ground(o, h, ny, wet, x, z, m, hs) { const d = coastZ(x) - z; if (h < WATER_Y + 0.06) o.set('#C9B78C'); else if (d < 1.3 && h < 0.5) o.set('#DCCB9E'); else if (ny < 0.62) o.set('#A89680'); else o.set(VEG.coast(m)[hs > 0.5 ? 0 : 1]); },
+      props(rng) {
+        const first = addHouses({ n: 13, zone: (x, z, h, ny) => { const d = coastZ(x) - z; return d > 1.3 && d < 5.5 && ny > 0.8; },
+          w: [0.55, 0.85], d: [0.5, 0.75], hgt: [0.4, 0.62], walls: ['#F4F1EA', '#EFE6D2', '#F7F3EC'], roofs: ['#E9E4DA'], roof: 'flat', rot: 0 }, rng);
+        addTrees('cypress', 26, (x, z, h, ny) => coastZ(x) - z > 1.5 && ny > 0.75, rng, 0.8, 1.3);
+        addTrees('olive', 45, (x, z, h, ny) => coastZ(x) - z > 1.2 && ny > 0.7 && h < 3, rng, 0.8, 1.2);
+        addBoats(2, rng); addSockNear(first, rng);
+      }
+    },
+    tropical: {
+      water: '#1E8C9C', seed: 41,
+      h(x, z) { const d = tropZ(x) - z; if (d < 0) return Math.max(-0.6, 0.12 + d * 0.5); const n = N(x, z); return 0.12 + smooth(0, 1, d) * 0.22 + Math.max(0, d - 1.3) * 0.24 * (0.7 + n * 0.6) + 3.4 * Math.exp(-((x + 1.5) ** 2 + (z + 5.5) ** 2) / 12) * smooth(1, 4, d); },
+      wet: (x, z) => 1 - smooth(-0.15, 0.35, tropZ(x) - z),
+      ground(o, h, ny, wet, x, z, m, hs) { const d = tropZ(x) - z; if (h < WATER_Y + 0.06) o.set('#D9C9A0'); else if (d < 1.3 && h < 0.55) o.set('#E6D6A8'); else if (ny < 0.55) o.set('#5C5A4E'); else o.set(hs > 0.5 ? '#3F7A2E' : '#4E8A33'); },
+      props(rng) {
+        const first = addHouses({ n: 5, allowWater: true, zone: (x, z, h, ny) => { const d = tropZ(x) - z; return d > -0.5 && d < 0.7 && Math.abs(x) < 7; },
+          w: [0.6, 0.8], d: [0.5, 0.65], hgt: [0.35, 0.45], walls: ['#9C7A52', '#8A6A45'], roofs: ['#C9A85C', '#B89650'], roof: 'pyramid', roofH: 0.55, stilts: true, rot: 0 }, rng);
+        addTrees('palm', 34, (x, z, h, ny) => { const d = tropZ(x) - z; return d > 0.25 && d < 2.4 && h < 0.9; }, rng, 0.8, 1.25);
+        addTrees('jungle', 130, (x, z, h, ny) => tropZ(x) - z > 1.6 && ny > 0.62, rng, 0.75, 1.35, 0.32);
+        addBoats(2, rng); addSockNear(first, rng);
+      }
+    },
+    desert: {
+      water: '#2E7C88', seed: 53,
+      h(x, z) {
+        const n = N(x, z), s = Math.sin(x * 0.85 + z * 0.4 + n * 3.2) * 0.5 + 0.5; let h = 0.3 + s * s * 0.55 + n * 0.5;
+        const m1 = 1 - smooth(0.82, 1.0, Math.hypot((x - 3) / 1.7, (z + 5.2) / 1.25)), m2 = 1 - smooth(0.82, 1.0, Math.hypot((x + 4.6) / 1.35, (z + 3.6) / 1.1));
+        h = Math.max(h, 0.3 + 2.5 * m1, 0.3 + 1.8 * m2);
+        const od = Math.hypot(x - OASIS[0], z - OASIS[1]); h -= (1 - smooth(1.0, 2.6, od)) * 0.2;
+        return lerp(h, -0.35, 1 - smooth(0.85, 1.3, od));
+      },
+      wet: (x, z) => 1 - smooth(0.85, 1.3, Math.hypot(x - OASIS[0], z - OASIS[1])),
+      ground(o, h, ny, wet, x, z, m, hs) {
+        const od = Math.hypot(x - OASIS[0], z - OASIS[1]);
+        if (h < WATER_Y + 0.08) o.set('#B89F72'); else if (od < 2.0 && h < 0.55) o.set(hs > 0.5 ? '#6E8A3E' : '#7F9447');
+        else if (h > 1.05 || ny < 0.6) o.set(Math.floor(h * 3.2) % 2 ? '#B5754A' : '#9E5A36'); else o.set(hs > 0.5 ? '#DDBB7E' : '#D2AC6A');
+      },
+      props(rng) {
+        const od = (x, z) => Math.hypot(x - OASIS[0], z - OASIS[1]);
+        const first = addHouses({ n: 4, zone: (x, z, h, ny) => od(x, z) > 1.5 && od(x, z) < 2.8 && ny > 0.85, w: [0.6, 0.9], d: [0.55, 0.8], hgt: [0.38, 0.55], walls: ['#C99B6B', '#D4A877', '#BF8F5F'], roofs: ['#B8895A'], roof: 'flat' }, rng);
+        addTrees('palm', 14, (x, z) => od(x, z) > 1.15 && od(x, z) < 2.3, rng, 0.85, 1.25);
+        addTrees('cactus', 28, (x, z, h, ny) => od(x, z) > 2.6 && ny > 0.8 && h < 1.0, rng, 0.7, 1.3);
+        addSockNear(first, rng);
+      }
+    },
+    mountain: {
+      water: '#2F6E86', seed: 67,
+      h(x, z) {
+        const ld = Math.hypot(x - LAKE[0], z - LAKE[1]), rr = Math.hypot(x, z) / R, rg = RG(x, z);
+        const ring = smooth(0.32, 0.78, rr) * (1.3 + rg * rg * 6.2) * lerp(1, 0.38, smooth(1.5, 4.5, z));
+        const peak = 3.2 * Math.exp(-((x - 1) ** 2 + (z + 6) ** 2) / 7);
+        return lerp(0.45 + N(x, z) * 0.7 + ring + peak, -0.45, 1 - smooth(1.4, 1.9, ld));
+      },
+      wet: (x, z) => 1 - smooth(1.4, 1.9, Math.hypot(x - LAKE[0], z - LAKE[1])),
+      ground(o, h, ny, wet, x, z, m, hs) { if (h < WATER_Y + 0.1) o.set('#7D776A'); else if (ny < 0.6) o.set('#6E6C69'); else if (h > 3.2) o.set('#7E7B6A'); else o.set(VEG.green(m)[hs > 0.5 ? 0 : 1]); },
+      props(rng) {
+        const ld = (x, z) => Math.hypot(x - LAKE[0], z - LAKE[1]);
+        const first = addHouses({ n: 6, zone: (x, z, h, ny) => ld(x, z) > 1.9 && ld(x, z) < 4.4 && ny > 0.9 && h < 1.4, w: [0.6, 0.85], d: [0.55, 0.7], hgt: [0.45, 0.6], walls: ['#7A5236', '#8A6240', '#6B4A30'], roofs: ['#3B3633', '#4A4440'], roof: 'gable', roofH: 0.62 }, rng);
+        addTrees('pine', 150, (x, z, h, ny) => h > 0.5 && h < 3.4 && ny > 0.7, rng, 0.65, 1.25);
+        addTrees('broad', 14, (x, z) => ld(x, z) > 1.9 && ld(x, z) < 3.5, rng, 0.7, 1.1);
+        addBoats(1, rng, 0.7); addSockNear(first, rng);
+      }
+    },
+    city: {
+      water: '#34566A', seed: 79,
+      h(x, z) { const d = quayZ(x) - z; if (d < 0) return -0.5; const n = N(x, z); return 0.22 + n * 0.06 + smooth(5.5, 10, d) * (n * 1.3 + RG(x, z) * 0.9); },
+      wet: (x, z) => 1 - smooth(-0.04, 0.04, quayZ(x) - z),
+      ground(o, h, ny, wet, x, z, m, hs) {
+        const d = quayZ(x) - z;
+        if (wet > 0.5 || d < 0.12) o.set('#7F7B72'); else if (h > 0.6) o.set(VEG.green(m)[hs > 0.5 ? 0 : 1]);
+        else if (isRoad(x, z)) o.set('#47494E'); else if (isPark(cellIx(x), cellIx(z))) o.set(VEG.green(m)[hs > 0.5 ? 1 : 0]); else o.set('#8C8D89');
+      },
+      props(rng) {
+        addCity(rng);
+        addTrees('broad', 70, (x, z, h) => h < 0.6 && !isRoad(x, z) && isPark(cellIx(x), cellIx(z)), rng, 0.6, 1.0, 0.25);
+        addTrees('broad', 40, (x, z, h, ny) => h > 0.7 && ny > 0.75, rng, 0.7, 1.1);
+        addBoats(2, rng);
+        const q = spot(rng, (x, z, h) => { const d = quayZ(x) - z; return d > 0.25 && d < 0.6 && Math.abs(x) < 6; }, 0.2);
+        if (q) addSock(q.x, q.z);
+      }
+    }
+  };
+  BIOMES.arctic = Object.assign({}, BIOMES.nordic, { veg: 'arctic', seed: 13 });
+
+  /* ---------- builders ---------- */
+  const cone = (r, h, s) => new THREE.ConeGeometry(r, h, s);
+  const cyl = (a, b, h, s = 6) => new THREE.CylinderGeometry(a, b, h, s);
+  const ico = r => new THREE.IcosahedronGeometry(r, 0);
+  function merge(list) {
+    const pos = [];
+    for (const g0 of list) { const g = g0.index ? g0.toNonIndexed() : g0; pos.push(...g.attributes.position.array); if (g !== g0) g.dispose(); g0.dispose(); }
+    const out = new THREE.BufferGeometry(); out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); out.computeVertexNormals(); return out;
+  }
+  const pick = (arr, r) => arr[Math.min(arr.length - 1, Math.floor(r * arr.length))];
+  const KIND = {
+    pine: () => [
+      { geo: merge([cone(0.28, 0.62, 6).translate(0, 0.42, 0), cone(0.2, 0.5, 6).translate(0, 0.78, 0)]), color: (s, r) => r < 0.5 ? '#2E4A31' : '#34503A', snow: 0.85, top: 1.0 },
+      { geo: cyl(0.035, 0.05, 0.22, 5).translate(0, 0.11, 0), color: () => '#4A3A2C' }],
+    broad: () => [
+      { geo: ico(0.32).scale(1, 0.85, 1).translate(0, 0.62, 0), color: (s, r) => s === 0 ? '#7D7266' : s === 1 ? (r < 0.5 ? '#8DBE52' : '#7DB04A') : s === 2 ? (r < 0.5 ? '#4F8A35' : '#5A9A3C') : pick(['#D9822B', '#C9572A', '#E2B33C', '#9C6B2E', '#B8862E'], r), snow: 0.6, top: 0.9 },
+      { geo: cyl(0.04, 0.06, 0.42, 5).translate(0, 0.21, 0), color: () => '#5A4632' }],
+    jungle: () => [
+      { geo: ico(0.45).scale(1.1, 0.7, 1.1).translate(0, 0.8, 0), color: (s, r) => pick(['#2F6E2A', '#3E8A33', '#2A5F26'], r), top: 1.1 },
+      { geo: cyl(0.05, 0.07, 0.6, 5).translate(0, 0.3, 0), color: () => '#5A4632' }],
+    cypress: () => [
+      { geo: cone(0.13, 1.0, 6).translate(0, 0.6, 0), color: (s, r) => r < 0.5 ? '#2F4A2C' : '#35522F', snow: 0.5, top: 1.1 },
+      { geo: cyl(0.03, 0.04, 0.12, 5).translate(0, 0.06, 0), color: () => '#5E4B3A' }],
+    olive: () => [
+      { geo: ico(0.26).scale(1.2, 0.7, 1.2).translate(0, 0.4, 0), color: (s, r) => r < 0.5 ? '#7D8F68' : '#8A9A70', snow: 0.5, top: 0.55 },
+      { geo: cyl(0.035, 0.06, 0.28, 5).translate(0, 0.14, 0), color: () => '#5E4B3A' }],
+    palm: () => {
+      const fronds = [];
+      for (let k = 0; k < 6; k++) fronds.push(cone(0.11, 0.75, 4).scale(0.3, 1, 1).rotateZ(-(Math.PI / 2 + 0.32)).translate(0.33, -0.1, 0).rotateY(k * Math.PI / 3 + 0.3).translate(0.07, 1.1, 0));
+      return [
+        { geo: merge(fronds), color: (s, r) => r < 0.5 ? '#4F8A35' : '#5E9A3C', top: 1.1 },
+        { geo: cyl(0.035, 0.055, 1.12, 5).rotateZ(-0.06).translate(0.035, 0.56, 0), color: () => '#8A6E4A' }];
+    },
+    cactus: () => [
+      { geo: merge([cyl(0.08, 0.09, 0.9, 6).translate(0, 0.45, 0), cyl(0.05, 0.05, 0.26, 5).rotateZ(Math.PI / 2).translate(0.15, 0.42, 0), cyl(0.05, 0.05, 0.3, 5).translate(0.27, 0.56, 0), cyl(0.05, 0.05, 0.22, 5).rotateZ(Math.PI / 2).translate(-0.13, 0.32, 0), cyl(0.05, 0.05, 0.24, 5).translate(-0.23, 0.43, 0)]), color: (s, r) => r < 0.5 ? '#4E7A44' : '#5A8A4C', top: 0.9 }]
+  };
+  const stdMat = () => new THREE.MeshStandardMaterial({ color: '#FFFFFF', flatShading: true, roughness: 0.95 });
+  function freeAt(x, z, rad) { for (const o of occ) if (Math.hypot(x - o[0], z - o[1]) < rad + o[2]) return false; return true; }
+  function spot(rng, zone, rad, allowWater) {
+    for (let k = 0; k < 500; k++) {
+      const a = rng() * Math.PI * 2, r = Math.sqrt(rng()) * 9.0, x = Math.cos(a) * r, z = Math.sin(a) * r, h = heightAt(x, z);
+      if (!allowWater && h < WATER_Y + 0.08) continue;
+      const ny = normalY(x, z);
+      if (!zone(x, z, h, ny) || !freeAt(x, z, rad)) continue;
+      occ.push([x, z, rad]); return { x, z, h, ny };
+    }
+    return null;
+  }
+  function register(mesh, rnd, ys, colorFn, snowK) { props.push({ mesh, rnd, ys, colorFn, snowK: snowK || 0 }); }
+  function addTrees(kind, n, zone, rng, sMin = 0.7, sMax = 1.3, rad = 0.28) {
+    const spots = []; for (let i = 0; i < n; i++) { const s = spot(rng, zone, rad); if (!s) break; spots.push(s); }
+    if (!spots.length) return;
+    const items = spots.map(s => { const sc = sMin + rng() * (sMax - sMin); return { m: new THREE.Matrix4().compose(V(s.x, s.h - 0.04, s.z), new THREE.Quaternion().setFromAxisAngle(UPV, rng() * 6.28), V(sc, sc * (0.9 + rng() * 0.3), sc)), y: s.h, sc, r: rng() }; });
+    KIND[kind]().forEach(p => {
+      const mesh = new THREE.InstancedMesh(p.geo, stdMat(), items.length);
+      mesh.castShadow = true; mesh.receiveShadow = true;
+      items.forEach((it, i) => mesh.setMatrixAt(i, it.m)); mesh.instanceMatrix.needsUpdate = true;
+      register(mesh, items.map(it => it.r), items.map(it => it.y + (p.top || 0) * it.sc), p.color, p.snow);
+      land.add(mesh);
+    });
+  }
+  function addHouses(o, rng) {
+    const list = [];
+    for (let i = 0; i < o.n; i++) { const s = spot(rng, o.zone, 0.75, o.allowWater); if (!s) break; list.push(s); }
+    if (!list.length) return null;
+    const n = list.length;
+    const walls = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), stdMat(), n);
+    let roofG = null;
+    if (o.roof === 'gable') { const sh = new THREE.Shape(); sh.moveTo(-0.5, 0); sh.lineTo(0.5, 0); sh.lineTo(0, 1); sh.lineTo(-0.5, 0); roofG = new THREE.ExtrudeGeometry(sh, { depth: 1, bevelEnabled: false }).translate(0, 0, -0.5); }
+    else if (o.roof === 'pyramid') roofG = new THREE.ConeGeometry(0.72, 1, 4).rotateY(Math.PI / 4).translate(0, 0.5, 0);
+    else roofG = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+    const roofs = new THREE.InstancedMesh(roofG, stdMat(), n);
+    const wins = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), winMat, n * 2);
+    const posts = o.stilts ? new THREE.InstancedMesh(merge([0, 1, 2, 3].map(k => cyl(0.04, 0.04, 1, 5).translate(k & 1 ? 0.38 : -0.38, 0.5, k & 2 ? 0.3 : -0.3))), stdMat(), n) : null;
+    const wr = [], wy = [], rr = [], ry = [];
+    const one = V(1, 1, 1), qI = new THREE.Quaternion();
+    list.forEach((s, i) => {
+      const w = lerp(o.w[0], o.w[1], rng()), d = lerp(o.d[0], o.d[1], rng()), hh = lerp(o.hgt[0], o.hgt[1], rng());
+      const q = new THREE.Quaternion().setFromAxisAngle(UPV, (rng() - 0.5) * (o.rot === 0 ? 0.3 : 0.9));
+      const base = o.stilts ? Math.max(s.h, WATER_Y) + 0.38 : s.h - 0.05;
+      walls.setMatrixAt(i, new THREE.Matrix4().compose(V(s.x, base, s.z), q, V(w, hh, d)));
+      const rh = o.roof === 'flat' ? 0.06 : (o.roofH || 0.45) * w;
+      roofs.setMatrixAt(i, new THREE.Matrix4().compose(V(s.x, base + hh, s.z), q, o.roof === 'flat' ? V(w * 1.04, rh, d * 1.04) : V(w * 1.12, rh, d * 1.1)));
+      if (posts) posts.setMatrixAt(i, new THREE.Matrix4().compose(V(s.x, base - 0.9, s.z), q, V(w, 0.9, d)));
+      const hm = new THREE.Matrix4().compose(V(s.x, base, s.z), q, one);
+      [-1, 1].forEach((sg, k) => wins.setMatrixAt(i * 2 + k, hm.clone().multiply(new THREE.Matrix4().compose(V(sg * w * 0.24, hh * 0.55, d / 2 + 0.012), qI, V(w * 0.18, hh * 0.24, 1)))));
+      wr.push(rng()); wy.push(base + hh); rr.push(rng()); ry.push(base + hh + rh);
+    });
+    [walls, roofs, wins, posts].forEach(m => { if (!m) return; m.instanceMatrix.needsUpdate = true; m.castShadow = m !== wins; m.receiveShadow = true; land.add(m); });
+    register(walls, wr, wy, (s, r) => pick(o.walls, r), 0);
+    register(roofs, rr, ry, (s, r) => pick(o.roofs, r), o.roof === 'flat' ? 0.6 : 1);
+    if (posts) register(posts, wr, wy, () => '#6B5640', 0);
+    return list[0];
+  }
+  function canvasTex(w, h, draw) { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d')); const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t; }
+  function addCity(rng) {
+    const facade = canvasTex(128, 128, x => { x.fillStyle = '#FFFFFF'; x.fillRect(0, 0, 128, 128); x.fillStyle = '#5F7184'; for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) x.fillRect(i * 16 + 4, j * 16 + 4, 8, 9); });
+    const tints = ['#B9BDC2', '#D6CBB8', '#8FA9BF', '#A4A7AB'];
+    cityMats = tints.map(t => new THREE.MeshStandardMaterial({ color: t, map: facade, emissive: '#FFD58A', emissiveMap: canvasTex(128, 128, x => { x.fillStyle = '#000'; x.fillRect(0, 0, 128, 128); x.fillStyle = '#FFF'; for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) if (rng() < 0.42) x.fillRect(i * 16 + 4, j * 16 + 4, 8, 9); }), emissiveIntensity: 0, roughness: 0.55, metalness: 0.15, flatShading: true }));
+    cityRoof = new THREE.MeshStandardMaterial({ color: '#6E7175', roughness: 0.9, flatShading: true });
+    for (let ix = cellIx(-9); ix <= cellIx(9); ix++) for (let iz = cellIx(-9); iz <= cellIx(9); iz++) {
+      if (isPark(ix, iz)) continue;
+      const x0 = ix * CELL - 40 + ROAD, z0 = iz * CELL - 40 + ROAD, span = CELL - ROAD;
+      const split = rng() < 0.3 ? 2 : 1;
+      for (let k = 0; k < split; k++) {
+        const cx = x0 + span * (split === 1 ? 0.5 : 0.27 + k * 0.46), cz = z0 + span * 0.5;
+        if (Math.hypot(cx, cz) > 8.3 || quayZ(cx) - cz < 0.9) continue;
+        const gh = heightAt(cx, cz); if (gh > 0.6) continue;
+        const w = span * (split === 1 ? 0.62 + rng() * 0.28 : 0.38 + rng() * 0.06), d = span * (0.6 + rng() * 0.3);
+        const hh = 0.5 + 4.8 * Math.exp(-((cx - 0.3) ** 2 + (cz + 1.2) ** 2) / 10) * (0.5 + rng() * 0.9) + rng() * 0.4;
+        const g = new THREE.BoxGeometry(w, hh, d).translate(0, hh / 2, 0), uv = g.attributes.uv;
+        for (let f = 0; f < 6; f++) { if (f === 2 || f === 3) continue; const ext = f < 2 ? d : w; for (let v = f * 4; v < f * 4 + 4; v++) uv.setXY(v, uv.getX(v) * ext / 2.56, uv.getY(v) * hh / 2.9); }
+        const m = cityMats[Math.floor(rng() * cityMats.length)];
+        const mesh = new THREE.Mesh(g, [m, m, cityRoof, cityRoof, m, m]);
+        mesh.position.set(cx, gh - 0.02, cz); mesh.castShadow = true; mesh.receiveShadow = true;
+        land.add(mesh); occ.push([cx, cz, Math.max(w, d) * 0.6]);
+      }
+    }
+  }
+  function addBoats(n, rng, scale = 1) {
+    for (let b = 0; b < n; b++) for (let k = 0; k < 300; k++) {
+      const a = rng() * Math.PI * 2, r = Math.sqrt(rng()) * 8.6, x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (z < -2 || B.wet(x, z) < 0.98 || heightAt(x, z) > WATER_Y - 0.12 || !freeAt(x, z, 0.6)) continue;
+      occ.push([x, z, 0.6]);
+      const g = new THREE.Group();
+      const hull = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.14, 0.26), new THREE.MeshStandardMaterial({ color: '#F2F0EA', flatShading: true }));
+      const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.16, 0.18), new THREE.MeshStandardMaterial({ color: '#2B3B48', flatShading: true }));
+      cabin.position.set(-0.08, 0.14, 0); hull.castShadow = true; g.add(hull, cabin);
+      g.position.set(x, WATER_Y + 0.05, z); g.rotation.y = rng() * Math.PI; g.scale.setScalar(scale); g.userData.ph = rng() * 6;
+      land.add(g); boats.push(g); break;
+    }
+  }
+  function addSock(x, z) {
+    const h = heightAt(x, z);
+    const pole = new THREE.Mesh(cyl(0.02, 0.026, 1.5, 6), new THREE.MeshStandardMaterial({ color: '#E8E6E0' }));
+    pole.position.set(x, h + 0.75, z); pole.castShadow = true; land.add(pole);
+    const tex = canvasTex(8, 40, c => { for (let i = 0; i < 5; i++) { c.fillStyle = i % 2 ? '#F4F2EE' : '#E8571E'; c.fillRect(0, i * 8, 8, 8); } });
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    const sg = new THREE.CylinderGeometry(0.045, 0.11, 0.62, 10, 1, true).rotateZ(-Math.PI / 2).translate(0.31, 0, 0);
+    const sock = new THREE.Mesh(sg, new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide, roughness: 0.8 }));
+    sock.castShadow = true;
+    sockG = new THREE.Group(); sockG.position.set(x, h + 1.44, z); sockG.rotation.order = 'YZX'; sockG.add(sock); land.add(sockG);
+  }
+  function addSockNear(s, rng) {
+    const p = s ? spot(rng, (x, z, h, ny) => Math.hypot(x - s.x, z - s.z) < 1.8 && ny > 0.85, 0.15) : spot(rng, (x, z, h, ny) => ny > 0.9 && z > 0, 0.15);
+    if (p) addSock(p.x, p.z);
+  }
+
+  function radialGrid(rings, sectors, radius, fnY) {
+    const pos = [], idx = [];
+    pos.push(0, fnY(0, 0), 0);
+    for (let i = 1; i <= rings; i++) { const r = radius * i / rings; for (let j = 0; j < sectors; j++) { const a = j / sectors * Math.PI * 2, x = Math.cos(a) * r, z = Math.sin(a) * r; pos.push(x, fnY(x, z), z); } }
+    for (let j = 0; j < sectors; j++) idx.push(0, 1 + (j + 1) % sectors, 1 + j);
+    for (let i = 1; i < rings; i++) { const a0 = 1 + (i - 1) * sectors, a1 = 1 + i * sectors; for (let j = 0; j < sectors; j++) { const j1 = (j + 1) % sectors; idx.push(a0 + j, a0 + j1, a1 + j, a0 + j1, a1 + j1, a1 + j); } }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); return g;
+  }
+  function spriteTex(inner, outer) {
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const x = c.getContext('2d'), g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0, inner); g.addColorStop(0.35, inner); g.addColorStop(1, outer); x.fillStyle = g; x.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(c);
+  }
+
+  function buildTerrain() {
+    const g = radialGrid(60, 150, R, heightAt), P = g.attributes.position, n = P.count;
+    tH = new Float32Array(n); tNy = new Float32Array(n); tJit = new Float32Array(n); tHash = new Float32Array(n); tX = new Float32Array(n); tZ = new Float32Array(n); tWet = new Float32Array(n); tCol = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { const x = P.getX(i), z = P.getZ(i); tX[i] = x; tZ[i] = z; tH[i] = P.getY(i); tNy[i] = normalY(x, z); tWet[i] = B.wet(x, z); tJit[i] = (hash(i * 7, 3) - 0.5) * 0.06; tHash[i] = fbm(x * 0.9 + 40, z * 0.9 - 7); }
+    g.setAttribute('color', new THREE.BufferAttribute(tCol, 3));
+    terrain = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95, metalness: 0 }));
+    terrain.castShadow = true; terrain.receiveShadow = true; land.add(terrain);
+    // skirt: the cut-away sides of the diorama
+    const S = 150, sp = [], sc = [], si = [], radii = [R, R * 0.985, R * 0.9], levels = [null, -0.65, -2.6];
+    const rock = C('#5A4C40'), rock2 = C('#45392F'), deep = C('#2A231D'), wTop = C(B.water).multiplyScalar(0.8), wMid = C(B.water).multiplyScalar(0.55);
+    for (let l = 0; l < 3; l++) for (let j = 0; j < S; j++) {
+      const a = j / S * Math.PI * 2, rx = Math.cos(a) * R, rz = Math.sin(a) * R, hr = heightAt(rx, rz), wetEdge = hr < WATER_Y;
+      sp.push(Math.cos(a) * radii[l], l === 0 ? Math.max(hr, WATER_Y) : levels[l], Math.sin(a) * radii[l]);
+      const c = l === 0 ? (wetEdge ? wTop : rock) : l === 1 ? (wetEdge ? wMid : rock2) : deep; sc.push(c.r, c.g, c.b);
+    }
+    for (let l = 0; l < 2; l++) for (let j = 0; j < S; j++) { const j1 = (j + 1) % S, a = l * S + j, b = l * S + j1, c = (l + 1) * S + j, d = (l + 1) * S + j1; si.push(a, c, b, b, c, d); }
+    const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3)); sg.setAttribute('color', new THREE.Float32BufferAttribute(sc, 3)); sg.setIndex(si);
+    const skirt = new THREE.Mesh(sg, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1, side: THREE.DoubleSide }));
+    skirt.receiveShadow = true; land.add(skirt);
+    const bottom = new THREE.Mesh(new THREE.CircleGeometry(R * 0.9, 64), new THREE.MeshStandardMaterial({ color: '#221C17', roughness: 1 }));
+    bottom.rotation.x = Math.PI / 2; bottom.position.y = -2.6; land.add(bottom);
+  }
+  function disposeLand() {
+    if (!land) return;
+    land.traverse(o => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { if (m.map) m.map.dispose(); if (m.emissiveMap) m.emissiveMap.dispose(); m.dispose(); });
+    });
+    scene.remove(land); land = null;
+  }
+  function buildLand(key, place) {
+    disposeLand();
+    B = Object.assign({ key }, BIOMES[key] || BIOMES.temperate);
+    land = new THREE.Group(); scene.add(land);
+    occ = []; props = []; boats = []; sockG = null; cityMats = []; cityRoof = null;
+    winMat = new THREE.MeshBasicMaterial({ color: '#2A2B2E' });
+    buildTerrain();
+    B.props(mulberry32(B.seed * 1000 + Math.round(Math.abs(place.lat) * 100) * 31 + Math.round(Math.abs(place.lon) * 100)));
+    waterBaseColor.set(B.water);
+    lastSnow = -99; lastMonth = -1; recolor();
+    if (canvas) canvas.setAttribute('aria-label', `3D view of the weather over a small ${BIOME_LABEL[key].toLowerCase()} landscape. Drag sideways to turn it.`);
+  }
+  function setBiome(key, place) {
+    const k = key + '|' + place.lat.toFixed(2) + '|' + place.lon.toFixed(2);
+    if (k === landKey || !ok) return;
+    landKey = k;
+    OX = hash(Math.round(place.lon * 100), 17) * 40; OZ = hash(Math.round(place.lat * 100), 31) * 40;
+    st.lat = place.lat; st.lon = place.lon; st.south = place.lat < 0;
+    buildLand(key, place);
+  }
+
+  const tmpC = new THREE.Color();
+  function recolor() {
+    if (!land) return;
+    const sl = st.snowline, m = st.month, n = tH.length;
+    for (let i = 0; i < n; i++) {
+      const h = tH[i], ny = tNy[i], j = tJit[i];
+      B.ground(tmpC, h, ny, tWet[i], tX[i], tZ[i], m, tHash[i]);
+      let sn = smooth(sl - 0.3, sl + 0.3, h + j * 3); if (ny < 0.62) sn *= 0.5; if (h < WATER_Y + 0.02) sn = 0;
+      tmpC.lerp(SNOWC, sn);
+      tCol[i * 3] = clamp(tmpC.r + j, 0, 1); tCol[i * 3 + 1] = clamp(tmpC.g + j, 0, 1); tCol[i * 3 + 2] = clamp(tmpC.b + j, 0, 1);
+    }
+    terrain.geometry.attributes.color.needsUpdate = true;
+    const season = seasonOf(m);
+    for (const p of props) {
+      for (let i = 0; i < p.mesh.count; i++) {
+        tmpC.set(p.colorFn(season, p.rnd[i]));
+        if (p.snowK) tmpC.lerp(SNOWC, (1 - smooth(p.ys[i] + 0.2, p.ys[i] + 0.8, sl)) * 0.9 * p.snowK);
+        p.mesh.setColorAt(i, tmpC);
+      }
+      if (p.mesh.instanceColor) p.mesh.instanceColor.needsUpdate = true;
+    }
+    lastSnow = sl; lastMonth = m;
+  }
+
+  /* ---------- the world: water, sky, weather ---------- */
+  function build() {
+    const rng = mulberry32(20261025);
+    const wg = radialGrid(26, 96, R * 0.995, () => WATER_Y);
+    waterPos = wg.attributes.position; waterBase = Float32Array.from(waterPos.array);
+    waterMat = new THREE.MeshStandardMaterial({ color: '#2B5D77', roughness: 0.22, metalness: 0.2, flatShading: true, transparent: true, opacity: 0.92 });
+    water = new THREE.Mesh(wg, waterMat); water.receiveShadow = true; scene.add(water);
+
+    const puffG = new THREE.IcosahedronGeometry(1, 1);
+    for (let i = 0; i < CLOUD_N; i++) {
+      const mat = new THREE.MeshStandardMaterial({ color: '#F2F4F6', roughness: 1, flatShading: true, transparent: true, opacity: 0 });
+      const g = new THREE.Group(), k = 4 + Math.floor(rng() * 4);
+      for (let p = 0; p < k; p++) {
+        const m = new THREE.Mesh(puffG, mat), s = 0.55 + rng() * 0.7;
+        m.position.set((p - k / 2) * 0.62 + (rng() - 0.5) * 0.4, (rng() - 0.3) * 0.35 + (p > 0 && p < k - 1 ? 0.25 : 0), (rng() - 0.5) * 0.7);
+        m.scale.set(s * 1.15, s * 0.78, s); m.castShadow = true; g.add(m);
+      }
+      const a = rng() * Math.PI * 2, r = Math.sqrt(rng()) * 10.5;
+      g.position.set(Math.cos(a) * r, 6.3 + rng() * 1.7, Math.sin(a) * r);
+      g.userData = { mat, order: rng(), base: 0.85 + rng() * 0.5, alt: g.position.y };
+      clouds.push(g); scene.add(g);
+    }
+    clouds.sort((a, b) => a.userData.order - b.userData.order);
+
+    rainPos = new Float32Array(RAIN_N * 6);
+    for (let i = 0; i < RAIN_N; i++) spawnDrop(i, true);
+    const rgeo = new THREE.BufferGeometry(); rgeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3)); rgeo.setDrawRange(0, 0);
+    rainMat = new THREE.LineBasicMaterial({ color: '#C4D6E4', transparent: true, opacity: 0.55 });
+    rain = new THREE.LineSegments(rgeo, rainMat); rain.frustumCulled = false; scene.add(rain);
+
+    snowPos = new Float32Array(SNOW_N * 3); snowPhase = new Float32Array(SNOW_N);
+    for (let i = 0; i < SNOW_N; i++) { spawnFlake(i, true); snowPhase[i] = rng() * 6.28; }
+    const sgeo = new THREE.BufferGeometry(); sgeo.setAttribute('position', new THREE.BufferAttribute(snowPos, 3)); sgeo.setDrawRange(0, 0);
+    snowMat = new THREE.PointsMaterial({ size: 0.17, map: spriteTex('rgba(255,255,255,1)', 'rgba(255,255,255,0)'), transparent: true, depthWrite: false, color: '#FFFFFF' });
+    snow = new THREE.Points(sgeo, snowMat); snow.frustumCulled = false; scene.add(snow);
+
+    boltPos = new Float32Array(16 * 3);
+    const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.BufferAttribute(boltPos, 3));
+    boltMat = new THREE.LineBasicMaterial({ color: '#F4F2FF', transparent: true, opacity: 0, fog: false });
+    bolt = new THREE.Line(bg, boltMat); bolt.frustumCulled = false; scene.add(bolt);
+
+    sunMesh = new THREE.Mesh(new THREE.SphereGeometry(1.5, 24, 16), new THREE.MeshBasicMaterial({ color: '#FFE7B0', fog: false, transparent: true }));
+    sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: spriteTex('rgba(255,214,140,0.85)', 'rgba(255,190,110,0)'), blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false }));
+    sunGlow.scale.set(13, 13, 1); scene.add(sunMesh, sunGlow);
+    moonMat = new THREE.ShaderMaterial({
+      uniforms: { uL: { value: new THREE.Vector3(1, 0, 0) }, uOp: { value: 1 } }, transparent: true, depthWrite: false,
+      vertexShader: 'varying vec3 vN; void main(){ vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'uniform vec3 uL; uniform float uOp; varying vec3 vN; void main(){ float d = dot(normalize(vN), normalize(uL)); float b = smoothstep(-0.06, 0.12, d); vec3 c = mix(vec3(0.15,0.18,0.25), vec3(0.96,0.94,0.87), b); gl_FragColor = vec4(c, uOp); }'
+    });
+    moon = new THREE.Mesh(new THREE.SphereGeometry(1.3, 32, 20), moonMat); scene.add(moon);
+    const sv3 = [];
+    for (let i = 0; i < 520; i++) { const a = rng() * Math.PI * 2, y = rng() * 0.95 + 0.05, r = Math.sqrt(1 - y * y); sv3.push(Math.cos(a) * r * 80, y * 80 - 4, Math.sin(a) * r * 80); }
+    const stg = new THREE.BufferGeometry(); stg.setAttribute('position', new THREE.Float32BufferAttribute(sv3, 3));
+    starMat = new THREE.PointsMaterial({ size: 1.6, sizeAttenuation: false, color: '#FFFFFF', transparent: true, opacity: 0, fog: false, depthWrite: false });
+    stars = new THREE.Points(stg, starMat); scene.add(stars);
+
+    hemi = new THREE.HemisphereLight('#BFD6EE', '#3A362F', 0.6); scene.add(hemi);
+    amb = new THREE.AmbientLight('#8FA3BF', 0.12); scene.add(amb);
+    sunLight = new THREE.DirectionalLight('#FFF1DC', 1.2);
+    sunLight.castShadow = true; sunLight.shadow.mapSize.set(1024, 1024);
+    const sc2 = sunLight.shadow.camera; sc2.left = -14; sc2.right = 14; sc2.top = 14; sc2.bottom = -14; sc2.near = 1; sc2.far = 90;
+    sunLight.shadow.bias = -0.0006; sunLight.shadow.normalBias = 0.03;
+    scene.add(sunLight, sunLight.target);
+    moonLight = new THREE.DirectionalLight('#9DB3D9', 0.0); scene.add(moonLight, moonLight.target);
+    scene.fog = new THREE.Fog('#9CC9EE', 40, 120);
+  }
+
+  function spawnDrop(i, anyY) {
+    const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * 9.4;
+    const x = Math.cos(a) * r, z = Math.sin(a) * r, y = anyY ? Math.random() * 6.2 : 5.6 + Math.random() * 0.8;
+    const o = i * 6; rainPos[o] = x; rainPos[o + 1] = y; rainPos[o + 2] = z; rainPos[o + 3] = x; rainPos[o + 4] = y + 0.4; rainPos[o + 5] = z;
+  }
+  function spawnFlake(i, anyY) {
+    const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * 9.4;
+    const o = i * 3; snowPos[o] = Math.cos(a) * r; snowPos[o + 1] = anyY ? Math.random() * 6.2 : 5.8 + Math.random() * 0.6; snowPos[o + 2] = Math.sin(a) * r;
+  }
+  function strike() {
+    const a = Math.random() * Math.PI * 2, r = Math.random() * 6;
+    let x = Math.cos(a) * r, z = Math.sin(a) * r; const gy = land ? Math.max(heightAt(x, z), WATER_Y) : 0;
+    for (let i = 0; i < 16; i++) {
+      const t = i / 15, y = lerp(6.4, gy, t);
+      if (i > 0 && i < 15) { x += (Math.random() - 0.5) * 0.7; z += (Math.random() - 0.5) * 0.7; }
+      boltPos[i * 3] = x; boltPos[i * 3 + 1] = y; boltPos[i * 3 + 2] = z;
+    }
+    bolt.geometry.attributes.position.needsUpdate = true;
+    boltLife = 0.32; flash = 1;
+  }
+
+  /* sky gradient (CSS behind a transparent canvas) */
+  const SKY_KEYS = [
+    [-18, '#04070F', '#0A1323'], [-9, '#0A1430', '#1C2949'], [-4, '#1B2952', '#5E4F6B'],
+    [0, '#2A4275', '#D58864'], [4, '#3A64A0', '#EBB07E'], [12, '#3B78C0', '#A9CBE8'], [40, '#2C6DBE', '#9CC8EE']
+  ];
+  const _t = new THREE.Color(), _h = new THREE.Color(), _a = new THREE.Color(), _b = new THREE.Color();
+  function skyColors(alt) {
+    let i = 0; while (i < SKY_KEYS.length - 2 && alt > SKY_KEYS[i + 1][0]) i++;
+    const A = SKY_KEYS[i], Bk = SKY_KEYS[i + 1], t = clamp((alt - A[0]) / (Bk[0] - A[0]), 0, 1);
+    _t.set(A[1]).lerp(_a.set(Bk[1]), t); _h.set(A[2]).lerp(_b.set(Bk[2]), t);
+    const lum = smooth(-9, 10, alt);
+    const ovT2 = _a.set('#0D1116').lerp(_b.set('#76848F'), lum).clone().lerp(_b.set('#39424B'), st.storm * lum);
+    const ovH2 = _a.set('#191F26').lerp(_b.set('#B2BCC3'), lum).clone().lerp(_b.set('#5D6870'), st.storm * lum);
+    const k = clamp(Math.pow(st.cloud, 1.4) * 0.92 + st.fog * 0.5, 0, 1);
+    _t.lerp(ovT2, k); _h.lerp(ovH2, k);
+    if (st.fog > 0.01) { _h.lerp(_a.set('#A9B3B9').multiplyScalar(0.25 + 0.75 * lum), st.fog * 0.8); _t.lerp(_h, st.fog * 0.45); }
+    if (flash > 0.02) { _t.lerp(_a.set('#C9CCF0'), flash * 0.6); _h.lerp(_a.set('#DADCF5'), flash * 0.6); }
+    return [_t, _h];
+  }
+
+  function init(stage, sky, cv, place, key) {
+    skyEl = sky; canvas = cv;
+    try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' }); }
+    catch (e) { return false; }
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.setClearColor(0x000000, 0);
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(34, 1, 0.5, 300);
+    build();
+    ok = true;
+    setBiome(key, place);
+    resize();
+    new ResizeObserver(resize).observe(sky);
+    if ('IntersectionObserver' in window) new IntersectionObserver(es => { visible = es[0].isIntersecting; }).observe(sky);
+    canvas.addEventListener('pointerdown', e => { dragging = true; lastX = e.clientX; lastY = e.clientY; canvas.classList.add('drag'); try { canvas.setPointerCapture(e.pointerId); } catch (_) {} });
+    canvas.addEventListener('pointermove', e => {
+      if (!dragging) return;
+      az -= (e.clientX - lastX) * 0.007;
+      if (e.pointerType === 'mouse') el = clamp(el + (e.clientY - lastY) * 0.004, 0.12, 0.95);
+      lastX = e.clientX; lastY = e.clientY; lastInteract = performance.now();
+    });
+    const end = () => { if (dragging) { dragging = false; az0 = az; lastInteract = performance.now(); canvas.classList.remove('drag'); } };
+    canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end); canvas.addEventListener('lostpointercapture', end);
+    return true;
+  }
+
+  function resize() {
+    if (!renderer) return;
+    const w = skyEl.clientWidth, h = skyEl.clientHeight; if (!w || !h) return;
+    renderer.setSize(w, h, false);
+    const a = w / h, tv = Math.tan(17 * RAD);
+    dist = clamp(Math.max(12.6 / (tv * a), 9.6 / tv), 26, 72);
+    camera.aspect = a;
+    camera.setViewOffset(w, h, 0, h * 0.1, w, h); // nudge the island upward, clear of the text
+    camera.updateProjectionMatrix();
+  }
+
+  function setTarget(s) {
+    if (!s) return;
+    const k = codeKind(s.code), p = Math.max(0, s.precip || 0);
+    const inten = clamp(0.28 + Math.sqrt(p / 3) * 0.72, 0, 1);
+    let rainA = 0, snowA = 0, storm = 0, fog = 0;
+    switch (k) {
+      case 'drizzle': rainA = 0.18; break;
+      case 'rain': case 'showers': rainA = inten; break;
+      case 'heavyrain': rainA = Math.max(0.85, inten); break;
+      case 'thunder': rainA = Math.max(0.8, inten); storm = 1; break;
+      case 'sleet': rainA = inten * 0.6; snowA = inten * 0.6; break;
+      case 'snow': case 'snowshowers': snowA = inten; break;
+      case 'heavysnow': snowA = Math.max(0.85, inten); break;
+      case 'fog': fog = 1; break;
+    }
+    if (s.vis != null) fog = Math.max(fog, clamp(1 - s.vis / 9000, 0, 0.75));
+    let cloud = clamp((s.cloud ?? 50) / 100, 0, 1);
+    if (rainA + snowA > 0) cloud = Math.max(cloud, k === 'showers' || k === 'snowshowers' ? 0.65 : 0.9);
+    if (k === 'fog') cloud = Math.max(cloud, 0.6);
+    tg.cloud = cloud; tg.rain = rainA; tg.snow = snowA; tg.storm = storm; tg.fog = fog;
+    tg.wind = s.wind || 0; const v = dirVec((s.dir || 0) + 180); tg.wx = v[0]; tg.wz = v[1];
+    tg.temp = s.temp ?? 3;
+    tg.snowline = clamp(2.3 + tg.temp * 0.42 - snowA * 1.7, 0.02, 12);
+  }
+  let monthAt = -1e15, monthTz = '';
+  function setTime(ms, tz) { tg.time = ms; if (Math.abs(ms - monthAt) > 3600e3 || tz !== monthTz) { monthAt = ms; monthTz = tz; const m = localMonth(ms, tz); st.month = st.south ? (m + 6) % 12 : m; } }
+
+  const vSun = new THREE.Vector3(), vMoon = new THREE.Vector3(), vF = new THREE.Vector3(), vR = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
+  function tick(dt, t) {
+    if (!ok) return;
+    const k = 1 - Math.exp(-dt * 2.2);
+    for (const n of ['cloud', 'rain', 'snow', 'storm', 'fog', 'wind', 'wx', 'wz', 'temp']) st[n] += (tg[n] - st[n]) * k;
+    st.snowline += (tg.snowline - st.snowline) * (1 - Math.exp(-dt * 0.9));
+    let diff = tg.time - st.time;
+    if (Math.abs(diff) > 30 * 3600e3) { st.time = tg.time - Math.sign(diff) * 6 * 3600e3; diff = tg.time - st.time; }
+    st.time += diff * (1 - Math.exp(-dt * 3));
+    if (!visible) return;
+    const pdt = REDUCE ? 0 : dt;
+
+    if (land && (Math.abs(st.snowline - lastSnow) > 0.03 || lastMonth !== st.month)) recolor();
+
+    /* sun & moon */
+    const sp = sunPos(st.time, st.lat, st.lon), alt = sp.alt, day = smooth(-6, 8, alt);
+    const sv = dirVec(sp.az); vSun.set(sv[0] * Math.cos(alt * RAD), Math.sin(alt * RAD), sv[1] * Math.cos(alt * RAD)).normalize();
+    sunMesh.position.copy(vSun).multiplyScalar(58); sunGlow.position.copy(sunMesh.position);
+    const sunVis = smooth(-3, 1, alt) * (1 - st.cloud * 0.88) * (1 - st.fog * 0.7);
+    sunMesh.material.opacity = sunVis; sunGlow.material.opacity = sunVis * (alt < 8 ? 1 : 0.7);
+    sunMesh.visible = sunGlow.visible = sunVis > 0.01;
+    sunMesh.material.color.set(alt < 6 ? '#FFC98A' : '#FFF0C8');
+    const direct = smooth(-1.5, 5, alt) * (1 - 0.78 * st.cloud) * (1 - 0.5 * st.fog);
+    sunLight.position.copy(vSun).multiplyScalar(40); sunLight.intensity = 1.35 * direct;
+    sunLight.color.set('#FFA866').lerp(_a.set('#FFF3E2'), smooth(0, 18, alt));
+    const mv = dirVec(sp.az + 180), mAlt = 32 * RAD;
+    vMoon.set(mv[0] * Math.cos(mAlt), Math.sin(mAlt), mv[1] * Math.cos(mAlt));
+    moon.position.copy(vMoon).multiplyScalar(58);
+    const night = 1 - smooth(-6, 0, alt);
+    moonMat.uniforms.uOp.value = night * (1 - st.cloud * 0.92) * (1 - st.fog * 0.8);
+    moon.visible = moonMat.uniforms.uOp.value > 0.01;
+    const E = moonAge(st.time) / 29.530588853 * Math.PI * 2;
+    vF.copy(moon.position).sub(camera.position).normalize(); vR.crossVectors(vF, UP).normalize();
+    moonMat.uniforms.uL.value.copy(vF).multiplyScalar(Math.cos(E)).addScaledVector(vR, Math.sin(E));
+    const moonFull = 0.5 - 0.5 * Math.cos(E);
+    moonLight.position.copy(vMoon).multiplyScalar(40); moonLight.intensity = night * (0.12 + 0.3 * moonFull) * (1 - st.cloud * 0.75);
+    starMat.opacity = (1 - smooth(-12, -4, alt)) * Math.pow(1 - st.cloud, 1.6) * (1 - st.fog);
+    stars.visible = starMat.opacity > 0.01;
+
+    /* sky + fog */
+    const [top, hor] = skyColors(alt);
+    tAcc += dt;
+    if (tAcc > 0.06) {
+      tAcc = 0;
+      const str = `linear-gradient(180deg, ${top.getStyle()} 0%, ${_b.copy(top).lerp(hor, 0.55).getStyle()} 55%, ${hor.getStyle()} 100%)`;
+      if (str !== skyStr) { skyEl.style.background = str; skyStr = str; }
+    }
+    scene.fog.color.copy(hor);
+    const visF = 1 - st.fog;
+    scene.fog.near = dist * lerp(0.35, 1.0, visF); scene.fog.far = dist * lerp(1.15, 2.7, visF);
+
+    /* light levels */
+    flash *= Math.exp(-dt * 9);
+    hemi.color.copy(top).lerp(_a.set('#FFFFFF'), 0.35); hemi.intensity = 0.2 + 0.62 * day + flash * 1.6;
+    amb.intensity = 0.1 + 0.06 * (1 - day) + flash * 0.8;
+    const lightLevel = clamp(0.25 + 0.75 * day, 0, 1);
+
+    /* water */
+    const wa = 0.012 + Math.min(st.wind, 22) * 0.0045, arr = waterPos.array;
+    if (!REDUCE) {
+      for (let i = 0; i < arr.length; i += 3) { const x = waterBase[i], z = waterBase[i + 2]; arr[i + 1] = WATER_Y + Math.sin(x * 1.3 + t * 1.7 + z * 0.4) * wa + Math.cos(z * 1.9 - t * 1.25) * wa; }
+      waterPos.needsUpdate = true;
+    }
+    waterMat.color.copy(waterBaseColor).lerp(hor, 0.22);
+    boats.forEach(b => { const ph = b.userData.ph; b.position.y = WATER_Y + 0.05 + (REDUCE ? 0 : Math.sin(t * 1.4 + ph) * (0.02 + wa)); b.rotation.z = REDUCE ? 0 : Math.sin(t * 1.1 + ph) * (0.02 + wa * 1.5); });
+
+    /* lit windows */
+    const lit = clamp(1 - day + st.storm * 0.4, 0, 1);
+    if (winMat) winMat.color.set('#2A2B2E').lerp(_a.set('#FFD27A'), lit);
+    cityMats.forEach(m => { m.emissiveIntensity = lit * 0.95; });
+    if (cityRoof) cityRoof.color.set('#6E7175').lerp(SNOWC, (1 - smooth(0.6, 1.4, st.snowline)) * 0.9);
+
+    /* windsock: points downwind, hangs when calm */
+    if (sockG) {
+      const lift = smooth(0.5, 9, st.wind);
+      sockG.rotation.y = Math.atan2(-st.wz, st.wx);
+      sockG.rotation.z = -(1 - lift) * 1.25;
+      sockG.rotation.x = REDUCE ? 0 : Math.sin(t * 7) * 0.12 * lift;
+    }
+
+    /* clouds */
+    const cColor = _a.set('#F3F5F7').lerp(_b.set('#8F9AA4'), clamp((st.rain + st.snow) * 1.2, 0, 1)).lerp(_b.set('#4E5862'), st.storm * 0.85);
+    const drift = (0.06 + st.wind * 0.16) * pdt;
+    clouds.forEach((g, i) => {
+      const u = g.userData;
+      g.position.x += st.wx * drift; g.position.z += st.wz * drift;
+      const d = Math.hypot(g.position.x, g.position.z);
+      if (d > 12.8) { const f = -11.6 / d; g.position.x *= f; g.position.z *= f; }
+      const presence = clamp(st.cloud * CLOUD_N * 1.05 - i, 0, 1), fade = 1 - smooth(10, 12.8, d);
+      u.mat.opacity = presence * fade * 0.96;
+      u.mat.color.copy(cColor);
+      u.mat.emissive.copy(cColor).multiplyScalar(0.06 + flash * 0.5);
+      g.visible = u.mat.opacity > 0.01;
+      const sc = u.base * (0.8 + st.cloud * 0.75);
+      g.scale.set(sc, sc * (0.9 + st.storm * 0.4), sc);
+      g.position.y = u.alt - st.cloud * 0.6 - st.storm * 0.4;
+    });
+
+    /* rain */
+    const nr = Math.round(RAIN_N * clamp(st.rain, 0, 1));
+    if (nr > 4) {
+      const fall = 13, wx = st.wx * st.wind * 0.42, wz = st.wz * st.wind * 0.42, dy = fall * pdt;
+      for (let i = 0; i < nr; i++) {
+        const o = i * 6; rainPos[o] += wx * pdt; rainPos[o + 1] -= dy; rainPos[o + 2] += wz * pdt;
+        if (rainPos[o + 1] < 0 || rainPos[o] * rainPos[o] + rainPos[o + 2] * rainPos[o + 2] > 92) spawnDrop(i, false);
+        rainPos[o + 3] = rainPos[o] - wx * 0.035; rainPos[o + 4] = rainPos[o + 1] + fall * 0.035; rainPos[o + 5] = rainPos[o + 2] - wz * 0.035;
+      }
+      rain.geometry.attributes.position.needsUpdate = true;
+    }
+    rain.geometry.setDrawRange(0, nr * 2); rain.visible = nr > 4;
+    rainMat.color.set('#55606E').lerp(_a.set('#C9D9E6'), lightLevel);
+
+    /* snow */
+    const ns = Math.round(SNOW_N * clamp(st.snow, 0, 1));
+    if (ns > 4) {
+      const wx = st.wx * st.wind * 0.22, wz = st.wz * st.wind * 0.22;
+      for (let i = 0; i < ns; i++) {
+        const o = i * 3, ph = snowPhase[i];
+        snowPos[o] += (wx + Math.sin(t * 1.3 + ph) * 0.25) * pdt; snowPos[o + 1] -= (0.95 + (ph % 1) * 0.4) * pdt; snowPos[o + 2] += (wz + Math.cos(t * 1.1 + ph) * 0.25) * pdt;
+        if (snowPos[o + 1] < 0 || snowPos[o] * snowPos[o] + snowPos[o + 2] * snowPos[o + 2] > 92) spawnFlake(i, false);
+      }
+      snow.geometry.attributes.position.needsUpdate = true;
+    }
+    snow.geometry.setDrawRange(0, ns); snow.visible = ns > 4;
+    snowMat.color.set('#6B7686').lerp(_a.set('#FFFFFF'), lightLevel);
+
+    /* lightning */
+    if (st.storm > 0.5 && !REDUCE) { nextStrike -= dt; if (nextStrike <= 0) { strike(); nextStrike = 2.2 + Math.random() * 4.5; } }
+    if (boltLife > 0) { boltLife -= dt; boltMat.opacity = boltLife > 0.2 || (boltLife > 0.06 && boltLife < 0.12) ? 1 : 0; if (boltLife > 0.06 && boltLife < 0.12) flash = Math.max(flash, 0.7); } else boltMat.opacity = 0;
+    bolt.visible = boltMat.opacity > 0;
+
+    /* camera */
+    const now = performance.now();
+    if (!dragging && !REDUCE && now - lastInteract > 4000) { const target = az0 + Math.sin(t * 0.07) * 0.32; az += (target - az) * (1 - Math.exp(-dt * 0.6)); }
+    camera.position.set(Math.sin(az) * Math.cos(el) * dist, targetY + Math.sin(el) * dist, Math.cos(az) * Math.cos(el) * dist);
+    camera.lookAt(0, targetY, 0);
+    renderer.render(scene, camera);
+  }
+
+  return { init, tick, setTarget, setTime, setBiome, get ok() { return ok; } };
+})();
+
+/* ============================================================
+   UI
+   ============================================================ */
+const S = { sceneH: 0, playing: false, lastCol: null, lastDetailKey: '', selDay: -1 };
+const COL_W = 54, SVG_H = 252;
+
+function baseF() { const H = D.hourly, i = D.idxNow; return i + clamp((Date.now() - H[i].t) / 3600e3, 0, 0.999); }
+function maxSceneH() { return Math.max(0, D.hourly.length - 1 - baseF()); }
+const NUMS = ['temp', 'feels', 'rh', 'dew', 'pp', 'precip', 'cloud', 'pres', 'vis', 'wind', 'gust', 'uv'];
+function sampleAt(f) {
+  const H = D.hourly; f = clamp(f, 0, H.length - 1);
+  const i0 = Math.floor(f), i1 = Math.min(i0 + 1, H.length - 1), k = f - i0, a = H[i0], b = H[i1];
+  const s = { t: a.t + (b.t - a.t) * k };
+  for (const n of NUMS) { const va = a[n], vb = b[n]; s[n] = va == null || vb == null ? (va ?? vb) : va + (vb - va) * k; }
+  s.code = k < 0.5 ? a.code : b.code;
+  s.dir = lerpAngle(a.dir, b.dir, k);
+  return s;
+}
+function dayIndexAt(ms) { const ds = D.daily; for (let i = ds.length - 1; i >= 0; i--) if (ms >= ds[i].start) return i; return 0; }
+function isDayAt(ms) { return sunPos(ms, D.place.lat, D.place.lon).alt > -0.833; }
+
+/* ---------- overlay ---------- */
+function updateOverlay(s, timeMs) {
+  const tz = D.tz;
+  setText($('placeName'), D.place.name);
+  setText($('placeSub'), D.place.sub || '');
+  const bt = $('bigTemp'); setText(bt, fT(s.temp));
+  setText($('condText'), codeLabel(s.code));
+  setText($('condSub'), `Feels like ${fT(s.feels)} · ${fP(s.precip)} ${pU()}`);
+  const label = S.sceneH < 0.02 ? `Now · ${fWD(timeMs, tz)} ${fHM(timeMs, tz)}` : `${fWD(timeMs, tz)} ${fDM(timeMs, tz)} · ${fHM(Math.round(timeMs / 600e3) * 600e3, tz)}`;
+  setText($('timeLabel'), label);
+  const ws = `${fW(s.wind)}<small>${wU()}</small>`; if ($('wbSpeed').dataset.v !== ws) { $('wbSpeed').innerHTML = ws; $('wbSpeed').dataset.v = ws; }
+  const bf = beaufort(s.wind);
+  setText($('wbName'), `from ${compass(s.dir)} · ${BF_EN[bf]}`);
+  $('wbArrow').setAttribute('transform', `rotate(${((s.dir + 180) % 360).toFixed(0)})`);
+  $('windBadge').setAttribute('aria-label', `Wind ${fW(s.wind)} ${wU()} from ${compass(s.dir)}`);
+}
+
+/* ---------- 48-hour strip ---------- */
+function renderHours() {
+  const H = D.hourly, tz = D.tz, i0 = D.idxNow, N = Math.min(CFG.hoursShown, H.length - i0);
+  const rows = H.slice(i0, i0 + N);
+  const temps = rows.map(r => tConv(r.temp));
+  let tmin = Math.min(...temps), tmax = Math.max(...temps); if (tmax - tmin < 4) { const m = (tmax + tmin) / 2; tmin = m - 2; tmax = m + 2; }
+  const yT = v => 84 + (tmax - v) / (tmax - tmin) * 62;
+  const pmax = Math.max(2, ...rows.map(r => r.precip));
+  const W = N * COL_W;
+  let s = `<rect id="selRect" class="hx-sel" x="0" y="0" width="${COL_W}" height="${SVG_H}"/><rect id="selBar" class="hx-selbar" x="0" y="0" width="${COL_W}" height="3"/>`;
+  const zero = U.temp === 'F' ? 32 : 0;
+  if (tmin < zero && tmax > zero) s += `<line class="hx-zero" x1="0" x2="${W}" y1="${yT(zero).toFixed(1)}" y2="${yT(zero).toFixed(1)}"/>`;
+  rows.forEach((r, i) => {
+    if (i > 0 && localHour(r.t, tz) === 0) s += `<line class="hx-sep" x1="${i * COL_W}" x2="${i * COL_W}" y1="4" y2="${SVG_H}"/><text class="hx-day" x="${i * COL_W + 5}" y="14">${esc(fWD(r.t, tz))}</text>`;
+  });
+  let path = '';
+  rows.forEach((r, i) => {
+    const cx = i * COL_W + COL_W / 2, y = yT(temps[i]);
+    path += (i ? 'L' : 'M') + cx.toFixed(1) + ' ' + y.toFixed(1);
+  });
+  s += `<path class="hx-line" d="${path}"/>`;
+  rows.forEach((r, i) => {
+    const cx = i * COL_W + COL_W / 2, y = yT(temps[i]), tc = tCls(r.temp);
+    s += `<text class="hx-time${i === 0 ? ' now' : ''}" x="${cx}" y="32" text-anchor="middle">${i === 0 ? 'Now' : fHH(r.t, tz)}</text>`;
+    s += `<svg x="${cx - 14}" y="38" width="28" height="28" viewBox="0 0 32 32">${iconSVG(r.code, isDayAt(r.t + 1800e3)).replace(/^<svg[^>]*>|<\/svg>$/g, '')}</svg>`;
+    s += `<circle class="${tc}" cx="${cx}" cy="${y.toFixed(1)}" r="3"/>`;
+    s += `<text class="hx-temp ${tc}" x="${cx}" y="${(y - 8).toFixed(1)}" text-anchor="middle">${fT(r.temp)}</text>`;
+    if (r.precip >= 0.05) {
+      const bh = Math.max(2, Math.min(1, r.precip / pmax) * 34);
+      s += `<rect class="hx-bar" x="${cx - 9}" y="${200 - bh}" width="18" height="${bh}" rx="2"/>`;
+      s += `<text class="hx-mm" x="${cx}" y="${200 - bh - 4}" text-anchor="middle">${fP(r.precip)}</text>`;
+    }
+    s += `<path class="hx-arrow" transform="translate(${cx} 218) rotate(${((r.dir + 180) % 360).toFixed(0)})" d="M0 -7 L4.5 5 L0 2.4 L-4.5 5 Z"/>`;
+    s += `<text class="hx-ws" x="${cx}" y="244" text-anchor="middle">${fW(r.wind)}</text>`;
+  });
+  s += `<rect class="hx-hit" x="0" y="0" width="${W}" height="${SVG_H}"/>`;
+  const svg = $('hourSvg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${SVG_H}`); svg.setAttribute('width', W); svg.setAttribute('height', SVG_H);
+  svg.innerHTML = s;
+  svg.setAttribute('aria-label', `Hourly forecast for ${D.place.name}: ${N} hours, temperatures ${fT(Math.min(...rows.map(r => r.temp)))} to ${fT(Math.max(...rows.map(r => r.temp)))}.`);
+  S.lastCol = null;
+}
+function moveSel(col, follow) {
+  const inRange = col >= 0 && col < CFG.hoursShown;
+  const r = $('selRect'), b = $('selBar'); if (!r) return;
+  r.style.display = b.style.display = inRange ? '' : 'none';
+  if (!inRange) return;
+  r.setAttribute('x', col * COL_W); b.setAttribute('x', col * COL_W);
+  const box = $('hours'), x = col * COL_W;
+  if (follow) box.scrollLeft = x - box.clientWidth / 2 + COL_W / 2;
+  else if (x < box.scrollLeft || x + COL_W > box.scrollLeft + box.clientWidth) box.scrollTo({ left: x - box.clientWidth / 3, behavior: 'smooth' });
+}
+
+/* ---------- 10 days ---------- */
+function renderDays() {
+  const tz = D.tz, ds = D.daily, todayKey = dateKey(Date.now(), tz);
+  const lo = Math.min(...ds.map(d => d.tmin)), hi = Math.max(...ds.map(d => d.tmax)), span = Math.max(1, hi - lo);
+  const colorOf = c => c < 0 ? 'var(--cold)' : 'var(--warm)';
+  $('dayList').innerHTML = ds.map((d, i) => {
+    const key = dateKey(d.start + 6 * 3600e3, tz);
+    const tomorrow = dateKey(Date.now() + 864e5, tz);
+    const name = key === todayKey ? 'Today' : key === tomorrow ? 'Tomorrow' : fWD(d.start + 6 * 3600e3, tz);
+    const l = (d.tmin - lo) / span * 100, r = 100 - (d.tmax - lo) / span * 100;
+    return `<li><button class="day" type="button" data-i="${i}" aria-pressed="false">
+      <span class="dname"><b>${name}</b><small>${esc(fDM(d.start + 6 * 3600e3, tz))}</small></span>
+      <span class="dicon">${iconSVG(d.code, true)}</span>
+      <span class="drange"><span class="tmin ${tCls(d.tmin)}">${fT(d.tmin)}</span><span class="dbar"><i style="left:${l.toFixed(1)}%;right:${r.toFixed(1)}%;background:linear-gradient(90deg,${colorOf(d.tmin)},${colorOf(d.tmax)})"></i></span><span class="tmax ${tCls(d.tmax)}">${fT(d.tmax)}</span></span>
+      <span class="dprec${d.psum < 0.05 ? ' zero' : ''}">${fP(d.psum)}<small>${pU()}</small></span>
+      <span class="dwind"><svg viewBox="-8 -8 16 16" aria-hidden="true"><path transform="rotate(${((d.wdir + 180) % 360).toFixed(0)})" d="M0 -7 L4.5 5 L0 2.4 L-4.5 5 Z"/></svg>${fW(d.wmax)}</span>
+    </button></li>`;
+  }).join('');
+  setText($('dayNote'), `Low · High · ${pU()} · ${wU()}`);
+}
+function markDay(ms) {
+  const di = dayIndexAt(ms);
+  if (di === S.selDay) return; S.selDay = di;
+  document.querySelectorAll('.day').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.i === di)));
+}
+
+/* ---------- details panel ---------- */
+function sunPathSVG(day, ms) {
+  const W = 300, Hh = 92, base = 58, lat = D.place.lat, lon = D.place.lon;
+  const ev = day.sun, top = Math.max(20, ev.maxA + 4), kU = 44 / top, kD = 26 / Math.max(20, -ev.minA);
+  const yA = a => a >= 0 ? base - a * kU : base - a * kD;
+  let pts = [];
+  for (let m = 0; m <= 1440; m += 20) { const t = day.start + m * 60e3; pts.push([m / 1440 * W, yA(sunPos(t, lat, lon).alt)]); }
+  const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join('');
+  let s = `<defs><clipPath id="spAbove"><rect x="0" y="0" width="${W}" height="${base}"/></clipPath><clipPath id="spBelow"><rect x="0" y="${base}" width="${W}" height="${Hh}"/></clipPath></defs>`;
+  s += `<path class="sp-day" clip-path="url(#spAbove)" d="${d}L${W} ${base}L0 ${base}Z"/>`;
+  s += `<path class="sp-curve" clip-path="url(#spAbove)" d="${d}"/><path class="sp-night" clip-path="url(#spBelow)" d="${d}"/>`;
+  s += `<line class="sp-h" x1="0" x2="${W}" y1="${base}" y2="${base}"/>`;
+  [0, 6, 12, 18, 24].forEach(h => { const x = h / 24 * W; s += `<text class="sp-t" x="${clamp(x, 8, W - 8)}" y="${Hh - 2}" text-anchor="middle">${String(h % 24).padStart(2, '0')}</text>`; });
+  if (ms >= day.start && ms <= day.start + 864e5) { const x = (ms - day.start) / 864e5 * W, y = yA(sunPos(ms, lat, lon).alt); s += `<circle class="sp-dot" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5"/>`; }
+  return `<svg class="sunpath" viewBox="0 0 ${W} ${Hh}" role="img" aria-label="The sun's height over the day">${s}</svg>`;
+}
+function renderDetails(s, timeMs) {
+  const tz = D.tz, di = dayIndexAt(timeMs), day = D.daily[di];
+  setText($('detailWhen'), S.sceneH < 0.02 ? 'Now' : `${fWD(timeMs, tz)} ${fDM(timeMs, tz)}, ${fHM(Math.floor(timeMs / 3600e3) * 3600e3, tz)}`);
+  const bf = beaufort(s.wind);
+  const prev = sampleAt(baseF() + S.sceneH - 3), dp = (s.pres != null && prev.pres != null) ? s.pres - prev.pres : null;
+  const trend = dp == null ? '' : Math.abs(dp) < 0.8 ? 'Steady' : dp > 0 ? `Rising ${dp.toFixed(1)} hPa in 3 h` : `Falling ${Math.abs(dp).toFixed(1)} hPa in 3 h`;
+  const [vv, vu] = fVis(s.vis);
+  const uv = s.uv ?? 0;
+  const air = D.air;
+  const ev = day.sun, prevEv = sunEvents(day.start - 864e5, D.place.lat, D.place.lon);
+  const dLen = ev.len - prevEv.len, dSign = dLen >= 0 ? '+' : '−';
+  let dl;
+  if (ev.state === 'polarnight') dl = `<div class="ts"><b>Polar night.</b> The sun stays below the horizon all day. Highest point ${ev.maxA.toFixed(1)}°.</div>`;
+  else if (ev.state === 'midnightsun') dl = `<div class="ts"><b>Midnight sun.</b> The sun stays above the horizon all day. Lowest point ${ev.minA.toFixed(1)}°.</div>`;
+  else dl = `<div class="dl"><div><span class="tl">Sunrise</span><b>${ev.rise ? fHM(ev.rise, tz) : '–'}</b></div><div><span class="tl">Sunset</span><b>${ev.set ? fHM(ev.set, tz) : '–'}</b></div><div><span class="tl">Daylight</span><b>${Math.floor(ev.len / 3600e3)}<small style="font:500 12px var(--f-mono);color:var(--muted)"> h </small>${String(Math.round(ev.len / 60e3) % 60).padStart(2, '0')}</b></div></div>
+       <div class="ts">${fDur(ev.len)}, ${dSign}${Math.abs(Math.round(dLen / 60e3))} min from the day before. Sun peaks at ${ev.maxA.toFixed(1)}° at ${fHM(ev.maxT, tz)}.</div>`;
+  const html = `
+    <div class="tile"><span class="tl">Feels like</span><span class="tv ${tCls(s.feels)}">${fT(s.feels)}</span><span class="ts">Air ${fT(s.temp)}. ${s.wind > 4 && s.temp < 10 ? 'Wind chill makes it colder.' : s.rh > 80 && s.temp > 24 ? 'Humid air makes it warmer.' : 'Close to the air temperature.'}</span></div>
+    <div class="tile"><span class="tl">Wind</span>
+      <div class="trow"><span class="tv">${fW(s.wind)}<small>${wU()}</small></span>
+      <svg class="compass" viewBox="-32 -32 64 64" aria-hidden="true"><circle class="ring" r="24"/><text y="-28.5">N</text><text x="28.5">E</text><text y="29">S</text><text x="-28.5">W</text><path class="arr" transform="rotate(${((s.dir + 180) % 360).toFixed(0)})" d="M0 -18 L7 10 L0 5 L-7 10 Z"/></svg></div>
+      <span class="ts">From ${compass(s.dir)}. Gusts ${fW(s.gust)} ${wU()}.<br>Force ${bf}, ${BF_EN[bf].toLowerCase()} (${BF_NO[bf]})</span></div>
+    <div class="tile"><span class="tl">Precipitation</span><span class="tv">${fP(s.precip)}<small>${pU()}/h</small></span><span class="ts">${s.pp != null ? `<b>${Math.round(s.pp)}%</b> chance this hour. ` : ''}${fP(day.psum)} ${pU()} expected ${di === 0 ? 'today' : 'this day'}.</span></div>
+    <div class="tile"><span class="tl">Humidity</span><span class="tv">${Math.round(s.rh ?? 0)}<small>%</small></span><span class="ts">Dew point ${fT(s.dew)}.</span></div>
+    <div class="tile"><span class="tl">Pressure</span><span class="tv">${s.pres != null ? Math.round(s.pres) : '–'}<small>hPa</small></span><span class="ts">${trend}${dp != null && dp < -2.5 ? '. Unsettled weather likely.' : ''}</span></div>
+    <div class="tile"><span class="tl">Clouds &amp; visibility</span><span class="tv">${Math.round(s.cloud ?? 0)}<small>%</small></span><span class="ts">Visibility ${vv} ${vu}.</span></div>
+    <div class="tile"><span class="tl">UV index</span><span class="tv">${uv.toFixed(uv < 10 && uv % 1 ? 1 : 0)}<small>${uvLabel(uv)}</small></span><div class="meter"><i style="left:${clamp(uv / 11 * 100, 1, 99)}%"></i></div><span class="ts">Day maximum ${day.uvmax != null ? day.uvmax.toFixed(1) : '–'}.</span></div>
+    <div class="tile"><span class="tl">Air quality</span>${air ? `<span class="tv">${Math.round(air.aqi)}<small>${aqiLabel(air.aqi)}</small></span><div class="meter aqm"><i style="left:${clamp(air.aqi, 1, 99)}%"></i></div><span class="ts">European AQI, now. PM2.5 ${air.pm25 != null ? air.pm25.toFixed(0) : '–'} µg/m³.</span>` : `<span class="tv">–</span><span class="ts">Not available for this place.</span>`}</div>
+    <div class="tile wide"><span class="tl">Daylight · ${esc(fWD(day.start + 6 * 3600e3, tz))} ${esc(fDM(day.start + 6 * 3600e3, tz))}</span>${dl}${sunPathSVG(day, timeMs)}</div>`;
+  $('panel').innerHTML = html;
+}
+
+/* ---------- scene-time controller ---------- */
+function onSceneChange(force) {
+  if (!D) return;
+  const f = baseF() + S.sceneH, s = sampleAt(f), timeMs = Date.now() + S.sceneH * 3600e3;
+  Scene.setTarget(s);
+  updateOverlay(s, timeMs);
+  const sl = $('scrub'), mx = Math.max(0.01, Math.min(CFG.hoursShown - 1, maxSceneH()));
+  sl.max = mx.toFixed(2);
+  if (document.activeElement !== sl || S.playing) sl.value = Math.min(S.sceneH, mx);
+  sl.style.setProperty('--p', (Math.min(S.sceneH, mx) / mx * 100).toFixed(1) + '%');
+  setText($('scrubOut'), S.sceneH < 0.02 ? 'Now' : `+${Math.floor(S.sceneH)} h · ${fHM(Math.round(timeMs / 600e3) * 600e3, D.tz)}`);
+  const col = Math.floor(f) - D.idxNow;
+  if (col !== S.lastCol || force) {
+    S.lastCol = col;
+    const mo = localMonth(timeMs, D.tz);
+    setText($('biomeLabel'), biomeText(D.biome, D.place.lat < 0 ? (mo + 6) % 12 : mo));
+    moveSel(col, S.playing);
+    renderDetails(s, timeMs);
+    markDay(timeMs);
+  }
+}
+function setSceneH(h, force) { if (!D) return; S.sceneH = clamp(h, 0, maxSceneH()); onSceneChange(force); }
+function setPlaying(p) {
+  S.playing = p;
+  const b = $('playBtn'); b.setAttribute('aria-pressed', String(p));
+  b.querySelector('span').textContent = p ? 'Pause' : 'Play time-lapse';
+  b.querySelector('path').setAttribute('d', p ? 'M1 0.5h3v9H1zM6 0.5h3v9H6z' : 'M1 0.5 L9.5 5 L1 9.5 Z');
+}
+
+/* ---------- status, notice, toast ---------- */
+function setStatus(mode) {
+  MODE = mode;
+  const c = $('status'); c.dataset.mode = mode;
+  setText($('statusText'), mode === 'live' ? `Live · ${fHM(D.updated, D.tz)}` : mode === 'example' ? 'Example data' : 'Loading');
+}
+function showNotice(text) { $('noticeText').textContent = text; $('notice').hidden = false; }
+let toastT;
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 4200); }
+
+/* ---------- load ---------- */
+let loadSeq = 0;
+function setData(d) {
+  D = prepare(d);
+  D.biome = classify(D.place, D);
+  Scene.setBiome(D.biome, D.place);
+  PLACE = Object.assign({}, D.place);
+  store.set('place', PLACE);
+  S.sceneH = clamp(S.sceneH, 0, maxSceneH()); S.selDay = -1;
+  renderHours(); renderDays();
+  setText($('footPlace'), `${D.place.name} · ${Math.abs(D.place.lat).toFixed(2)}°${D.place.lat >= 0 ? 'N' : 'S'} ${Math.abs(D.place.lon).toFixed(2)}°${D.place.lon >= 0 ? 'E' : 'W'} · Times in ${D.tz.replace(/_/g, ' ')}`);
+  onSceneChange(true);
+}
+async function load(place, silent) {
+  const seq = ++loadSeq;
+  if (!silent) { setText($('condText'), D ? $('condText').textContent : 'Loading forecast'); $('status').dataset.mode = 'loading'; setText($('statusText'), 'Loading'); }
+  try {
+    const d = await fetchLive(place);
+    if (seq !== loadSeq) return;
+    setData(d); setStatus('live'); $('notice').hidden = true;
+    fetchAir(place).then(a => { if (seq === loadSeq && D) { D.air = a; renderDetails(sampleAt(baseF() + S.sceneH), Date.now() + S.sceneH * 3600e3); } }).catch(() => { if (seq === loadSeq && D) D.air = null; });
+  } catch (err) {
+    if (seq !== loadSeq) return;
+    if (silent && D && D.live) { toast('Couldn’t refresh the forecast. Showing the last update.'); return; }
+    setData(exampleData(place)); setStatus('example');
+    showNotice('Showing example weather, not a real forecast. This viewer blocks outside data, so live forecasts can’t load here. Put this page on its own web address, for example GitHub Pages, and it loads live forecasts for any place.');
+  }
+}
+
+/* ---------- search ---------- */
+const q = $('q'), res = $('results');
+let searchT, searchSeq = 0, items = [], active = -1;
+function recents() { return store.get('recents', []); }
+function addRecent(p) { const r = recents().filter(x => !(Math.abs(x.lat - p.lat) < 0.01 && Math.abs(x.lon - p.lon) < 0.01)); r.unshift({ name: p.name, sub: p.sub, lat: p.lat, lon: p.lon, tz: p.tz, pop: p.pop, elev: p.elev, biome: p.biome }); store.set('recents', r.slice(0, 6)); }
+function openList(html, list) {
+  items = list; active = -1;
+  res.innerHTML = html; res.hidden = false; q.setAttribute('aria-expanded', 'true');
+}
+function closeList() { res.hidden = true; q.setAttribute('aria-expanded', 'false'); q.removeAttribute('aria-activedescendant'); }
+function rowsHTML(list, offset) { return list.map((p, i) => `<li role="option" id="opt${i + offset}" data-k="${i + offset}" aria-selected="false"><b>${esc(p.name)}</b><span>${esc(p.sub || '')}</span><em>${p.lat.toFixed(1)}, ${p.lon.toFixed(1)}</em></li>`).join(''); }
+function showDefaults() {
+  const r = recents(), quick = GAZ.slice(0, 10).filter(g => !r.some(x => x.name === g.name));
+  let html = '', list = [];
+  if (r.length) { html += '<li class="rhead" role="presentation">Recent</li>' + rowsHTML(r, 0); list = list.concat(r); }
+  html += '<li class="rhead" role="presentation">Places</li>' + rowsHTML(quick, list.length); list = list.concat(quick);
+  openList(html, list);
+}
+function localMatches(text) { const t = text.toLowerCase(); return GAZ.filter(g => g.name.toLowerCase().includes(t) || g.sub.toLowerCase().includes(t)); }
+async function runSearch(text) {
+  const seq = ++searchSeq;
+  let list = [], note = '';
+  try { list = await geocode(text); }
+  catch (e) { list = localMatches(text); note = 'Search covers built-in places only, because this viewer blocks outside data.'; }
+  if (seq !== searchSeq || q.value.trim() !== text) return;
+  if (!list.length) { openList(`<li class="rnote" role="presentation">No places match “${esc(text)}”.${note ? ' ' + note : ''}</li>`, []); return; }
+  openList(rowsHTML(list, 0) + (note ? `<li class="rnote" role="presentation">${note}</li>` : ''), list);
+}
+function choose(p) {
+  closeList(); q.value = ''; q.blur();
+  addRecent(p); setPlaying(false); S.sceneH = 0;
+  load(p);
+}
+q.addEventListener('focus', () => { if (!q.value.trim()) showDefaults(); });
+q.addEventListener('input', () => {
+  const v = q.value.trim(); clearTimeout(searchT);
+  if (v.length < 2) { showDefaults(); return; }
+  searchT = setTimeout(() => runSearch(v), 280);
+});
+q.addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    if (res.hidden || !items.length) return; e.preventDefault();
+    active = (active + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+    res.querySelectorAll('[role=option]').forEach(li => li.setAttribute('aria-selected', String(+li.dataset.k === active)));
+    q.setAttribute('aria-activedescendant', 'opt' + active);
+    const el = $('opt' + active); if (el) el.scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (items.length) choose(items[Math.max(0, active)]);
+    else if (q.value.trim().length >= 2) runSearch(q.value.trim());
+  } else if (e.key === 'Escape') { closeList(); q.blur(); }
+});
+res.addEventListener('pointerdown', e => { const li = e.target.closest('[data-k]'); if (li) { e.preventDefault(); choose(items[+li.dataset.k]); } });
+document.addEventListener('pointerdown', e => { if (!e.target.closest('.search')) closeList(); });
+
+/* ---------- controls ---------- */
+$('locBtn').addEventListener('click', () => {
+  if (!navigator.geolocation) { toast('Location isn’t available in this browser. Search for a place instead.'); return; }
+  toast('Finding your location…');
+  navigator.geolocation.getCurrentPosition(pos => {
+    const p = { name: 'My location', sub: `${pos.coords.latitude.toFixed(2)}, ${pos.coords.longitude.toFixed(2)}`, lat: pos.coords.latitude, lon: pos.coords.longitude, tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' };
+    $('toast').hidden = true; choose(p);
+  }, () => toast('Location isn’t available here. Search for a place instead.'), { timeout: 10000, maximumAge: 600000 });
+});
+function syncUnitButtons() { $('tempUnit').textContent = U.temp === 'F' ? '°F' : '°C'; $('windUnit').textContent = wU(); $('tempUnit').setAttribute('aria-label', `Temperature unit, ${U.temp === 'F' ? 'Fahrenheit' : 'Celsius'}`); $('windUnit').setAttribute('aria-label', `Wind unit, ${wU()}`); }
+function rerenderUnits() { store.set('units', U); syncUnitButtons(); if (D) { renderHours(); renderDays(); S.selDay = -1; onSceneChange(true); } }
+$('tempUnit').addEventListener('click', () => { U.temp = U.temp === 'C' ? 'F' : 'C'; rerenderUnits(); });
+$('windUnit').addEventListener('click', () => { U.wind = WIND_ORDER[(WIND_ORDER.indexOf(U.wind) + 1) % WIND_ORDER.length]; rerenderUnits(); });
+$('scrub').addEventListener('input', e => { setPlaying(false); setSceneH(+e.target.value); });
+$('nowBtn').addEventListener('click', () => { setPlaying(false); setSceneH(0); $('hours').scrollTo({ left: 0, behavior: 'smooth' }); });
+$('playBtn').addEventListener('click', () => {
+  if (!D) return;
+  if (!S.playing && S.sceneH >= Math.min(CFG.hoursShown - 1, maxSceneH()) - 0.05) setSceneH(0);
+  setPlaying(!S.playing);
+});
+$('hourSvg').addEventListener('click', e => {
+  if (!D) return;
+  const rect = e.currentTarget.getBoundingClientRect(), col = Math.floor((e.clientX - rect.left) / COL_W);
+  setPlaying(false); setSceneH(D.idxNow + col - baseF());
+});
+$('dayList').addEventListener('click', e => {
+  const b = e.target.closest('.day'); if (!b || !D) return;
+  const day = D.daily[+b.dataset.i]; setPlaying(false);
+  const target = day.start + 13 * 3600e3;
+  setSceneH(Math.max(0, (target - Date.now()) / 3600e3));
+  if (S.sceneH > CFG.hoursShown - 1) toast('The 3D view and details now show midday on that day.');
+});
+$('retryBtn').addEventListener('click', () => load(PLACE));
+
+/* ---------- main loop ---------- */
+let lastFrame = performance.now(), secAcc = 0, sceneLive = true;
+function frame(now) {
+  const dt = Math.min(0.05, (now - lastFrame) / 1000); lastFrame = now;
+  if (D) {
+    if (S.playing) {
+      const end = Math.min(CFG.hoursShown - 1, maxSceneH());
+      const next = S.sceneH + dt * CFG.playHoursPerSecond;
+      if (next >= end) { setSceneH(end); setPlaying(false); } else setSceneH(next);
+    }
+    Scene.setTime(Date.now() + S.sceneH * 3600e3, D.tz);
+    secAcc += dt;
+    if (secAcc > 30) { // keep "now" current while the page stays open
+      secAcc = 0;
+      const old = D.idxNow; let i = old; while (i < D.hourly.length - 1 && D.hourly[i + 1].t <= Date.now()) i++;
+      if (i !== old) { D.idxNow = i; renderHours(); renderDays(); }
+      if (!S.playing) onSceneChange(i !== old);
+      if (MODE === 'live' && Date.now() - D.updated > CFG.refreshMs) load(PLACE, true);
+    }
+  }
+  if (sceneLive) {
+    try { Scene.tick(dt, now / 1000); }
+    catch (err) { sceneLive = false; console.error('3D view stopped:', err); }
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ---------- boot ---------- */
+syncUnitButtons();
+if (!Scene.init($('stage'), $('sky'), $('gl'), PLACE, classify(PLACE, null))) {
+  const n = document.createElement('div'); n.className = 'nogl'; n.textContent = 'The 3D view needs WebGL, which isn’t available here.'; $('sky').appendChild(n);
+}
+requestAnimationFrame(frame);
+load(PLACE);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && MODE === 'live' && D && Date.now() - D.updated > CFG.refreshMs) load(PLACE, true); });
+</script>
+
+</body>
+</html>

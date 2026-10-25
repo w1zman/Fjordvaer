@@ -57,7 +57,9 @@ h1,h2{margin:0;text-wrap:balance}
 .sky::before{content:"";position:absolute;inset:0 0 auto;height:140px;background:linear-gradient(rgba(5,10,18,.42),rgba(5,10,18,0));pointer-events:none;z-index:1}
 .sky::after{content:"";position:absolute;inset:auto 0 0;height:62%;background:linear-gradient(to top,rgba(5,10,18,.66),rgba(5,10,18,0));pointer-events:none;z-index:1}
 .stage-top,.stage-bottom{position:absolute;left:0;right:0;z-index:2;pointer-events:none}
-.stage-top{top:0;padding-block:14px 0}
+.stage-top{top:0;padding-block:14px 0;z-index:4}
+.stage-bottom{transition:opacity .2s ease}
+.stage.searching .stage-bottom{opacity:0}
 .stage-bottom{bottom:0;padding-block:0 20px}
 .search,.sbtn,.results{pointer-events:auto}
 .topbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px}
@@ -1698,9 +1700,9 @@ function recents() { return store.get('recents', []); }
 function addRecent(p) { const r = recents().filter(x => !(Math.abs(x.lat - p.lat) < 0.01 && Math.abs(x.lon - p.lon) < 0.01)); r.unshift({ name: p.name, sub: p.sub, lat: p.lat, lon: p.lon, tz: p.tz, pop: p.pop, elev: p.elev, biome: p.biome }); store.set('recents', r.slice(0, 6)); }
 function openList(html, list) {
   items = list; active = -1;
-  res.innerHTML = html; res.hidden = false; q.setAttribute('aria-expanded', 'true');
+  res.innerHTML = html; res.hidden = false; q.setAttribute('aria-expanded', 'true'); $('stage').classList.add('searching');
 }
-function closeList() { res.hidden = true; q.setAttribute('aria-expanded', 'false'); q.removeAttribute('aria-activedescendant'); }
+function closeList() { res.hidden = true; q.setAttribute('aria-expanded', 'false'); q.removeAttribute('aria-activedescendant'); $('stage').classList.remove('searching'); }
 function rowsHTML(list, offset) { return list.map((p, i) => `<li role="option" id="opt${i + offset}" data-k="${i + offset}" aria-selected="false"><b>${esc(p.name)}</b><span>${esc(p.sub || '')}</span><em>${p.lat.toFixed(1)}, ${p.lon.toFixed(1)}</em></li>`).join(''); }
 function showDefaults() {
   const r = recents(), quick = GAZ.slice(0, 10).filter(g => !r.some(x => x.name === g.name));

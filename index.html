@@ -38,7 +38,8 @@
   color-scheme:dark;
 }
 *{box-sizing:border-box}
-html,body{background:var(--bg)}
+html,body{background:var(--bg);overflow-x:clip;max-width:100%}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 button,input{font:inherit;color:inherit}
 button{cursor:pointer}
@@ -71,7 +72,7 @@ h1,h2{margin:0;text-wrap:balance}
 .chip[data-mode="example"] i{background:#F5BC45}
 .controls{display:flex;gap:8px;align-items:center;flex:1 1 320px;justify-content:flex-end;min-width:0}
 .search{position:relative;flex:1 1 220px;max-width:340px;min-width:0}
-.search input{width:100%;height:38px;border-radius:8px;border:1px solid var(--glass-line);background:var(--glass);color:var(--on-sky);padding:0 12px 0 34px;outline:none;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);font-size:15px}
+.search input{width:100%;height:38px;border-radius:8px;border:1px solid var(--glass-line);background:var(--glass);color:var(--on-sky);padding:0 12px 0 34px;outline:none;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);font-size:16px}
 .search input::placeholder{color:var(--on-sky-dim)}
 .search input:focus{border-color:rgba(255,255,255,.7);background:rgba(255,255,255,.22)}
 .search input::-webkit-search-cancel-button{filter:invert(1)}

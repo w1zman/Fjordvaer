@@ -53,8 +53,7 @@ h1,h2{margin:0;text-wrap:balance}
 /* ---------- Stage ---------- */
 .stage{position:relative;height:clamp(420px,60vh,640px);color:var(--on-sky);z-index:3}
 .sky{position:absolute;inset:0;overflow:hidden;background:linear-gradient(180deg,#2F5F9A 0%,#7C9FC4 60%,#E2A577 100%)}
-.sky canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:pan-y;cursor:grab}
-.sky canvas.drag{cursor:grabbing}
+.sky canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .sky::before{content:"";position:absolute;inset:0 0 auto;height:140px;background:linear-gradient(rgba(5,10,18,.42),rgba(5,10,18,0));pointer-events:none;z-index:1}
 .sky::after{content:"";position:absolute;inset:auto 0 0;height:62%;background:linear-gradient(to top,rgba(5,10,18,.66),rgba(5,10,18,0));pointer-events:none;z-index:1}
 .stage-top,.stage-bottom{position:absolute;left:0;right:0;z-index:2;pointer-events:none}
@@ -238,7 +237,7 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
 
 <div class="stage" id="stage">
   <div class="sky" id="sky">
-    <canvas id="gl" role="img" aria-label="3D view of the weather over a small fjord landscape. Drag sideways to turn it."></canvas>
+    <canvas id="gl" role="img" aria-label="3D view of the weather over a small fjord landscape."></canvas>
   </div>
   <div class="stage-top">
     <div class="wrap topbar">
@@ -1110,7 +1109,7 @@ const Scene = (() => {
     B.props(mulberry32(B.seed * 1000 + Math.round(Math.abs(place.lat) * 100) * 31 + Math.round(Math.abs(place.lon) * 100)));
     waterBaseColor.set(B.water);
     lastSnow = -99; lastMonth = -1; recolor();
-    if (canvas) canvas.setAttribute('aria-label', `3D view of the weather over a small ${BIOME_LABEL[key].toLowerCase()} landscape. Drag sideways to turn it.`);
+    if (canvas) canvas.setAttribute('aria-label', `3D view of the weather over a small ${BIOME_LABEL[key].toLowerCase()} landscape.`);
   }
   function setBiome(key, place) {
     const k = key + '|' + place.lat.toFixed(2) + '|' + place.lon.toFixed(2);
@@ -1268,15 +1267,7 @@ const Scene = (() => {
     resize();
     new ResizeObserver(resize).observe(sky);
     if ('IntersectionObserver' in window) new IntersectionObserver(es => { visible = es[0].isIntersecting; }).observe(sky);
-    canvas.addEventListener('pointerdown', e => { dragging = true; lastX = e.clientX; lastY = e.clientY; canvas.classList.add('drag'); try { canvas.setPointerCapture(e.pointerId); } catch (_) {} });
-    canvas.addEventListener('pointermove', e => {
-      if (!dragging) return;
-      az -= (e.clientX - lastX) * 0.007;
-      if (e.pointerType === 'mouse') el = clamp(el + (e.clientY - lastY) * 0.004, 0.12, 0.95);
-      lastX = e.clientX; lastY = e.clientY; lastInteract = performance.now();
-    });
-    const end = () => { if (dragging) { dragging = false; az0 = az; lastInteract = performance.now(); canvas.classList.remove('drag'); } };
-    canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end); canvas.addEventListener('lostpointercapture', end);
+    // the view is fixed: no drag-to-turn, only a slow automatic sway
     return true;
   }
 

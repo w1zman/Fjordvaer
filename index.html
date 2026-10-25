@@ -96,7 +96,9 @@ h1,h2{margin:0;text-wrap:balance}
 .cond{display:flex;flex-direction:column;gap:2px;padding-bottom:6px;min-width:0}
 .cond b{font-weight:600;font-size:18px;line-height:1.15}
 .cond span{color:var(--on-sky-dim);font-size:14px}
-.when{margin-top:10px;font-size:12px;letter-spacing:.05em;color:var(--on-sky-dim);text-transform:uppercase}
+.when{margin-top:10px;font-size:12px;letter-spacing:.05em;color:var(--on-sky-dim);text-transform:uppercase;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
+.biome{font:500 10.5px/1 var(--f-mono);letter-spacing:.08em;padding:5px 8px;border-radius:99px;background:var(--glass);border:1px solid var(--glass-line);color:var(--on-sky);text-shadow:none}
+.biome:empty{display:none}
 .windbadge{display:flex;align-items:center;gap:10px;flex:none;padding-bottom:4px;text-shadow:0 1px 10px rgba(0,0,0,.3)}
 .windbadge svg{width:58px;height:58px;overflow:visible}
 .windbadge .wb-ring{fill:rgba(255,255,255,.1);stroke:rgba(255,255,255,.55);stroke-width:1.2}
@@ -263,7 +265,7 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
           <span class="bigtemp" id="bigTemp">–</span>
           <div class="cond"><b id="condText">Loading forecast</b><span id="condSub"></span></div>
         </div>
-        <div class="when" id="timeLabel"></div>
+        <div class="when"><span id="timeLabel"></span><span class="biome" id="biomeLabel"></span></div>
       </div>
       <div class="windbadge" id="windBadge" aria-label="Wind">
         <svg viewBox="-30 -30 60 60" aria-hidden="true">
@@ -316,7 +318,7 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
 </main>
 
 <footer class="wrap foot">
-  <p id="footSource">Forecast data by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> under CC BY 4.0. Sunrise, sunset and the sun’s path are calculated in the page.</p>
+  <p id="footSource">Forecast data by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> under CC BY 4.0. Sunrise, sunset and the sun’s path are calculated in the page. The 3D landscape is picked from the place’s latitude, height above sea level, climate and population.</p>
   <p id="footPlace" class="mono"></p>
 </footer>
 
@@ -332,7 +334,7 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
    ============================================================ */
 
 const CFG = {
-  defaultPlace: { name: 'Narvik', sub: 'Nordland, Norway', lat: 68.4385, lon: 17.4272, tz: 'Europe/Oslo' },
+  defaultPlace: { name: 'Narvik', sub: 'Nordland, Norway', lat: 68.4385, lon: 17.4272, tz: 'Europe/Oslo', pop: 14000, elev: 10 },
   forecastURL: 'https://api.open-meteo.com/v1/forecast',
   geocodeURL: 'https://geocoding-api.open-meteo.com/v1/search',
   airURL: 'https://air-quality-api.open-meteo.com/v1/air-quality',
@@ -342,25 +344,32 @@ const CFG = {
   playHoursPerSecond: 2
 };
 
-const GAZ = [
-  ['Narvik', 'Nordland, Norway', 68.4385, 17.4272, 'Europe/Oslo'],
-  ['Tromsø', 'Troms, Norway', 69.6492, 18.9553, 'Europe/Oslo'],
-  ['Bodø', 'Nordland, Norway', 67.2804, 14.4049, 'Europe/Oslo'],
-  ['Svolvær', 'Lofoten, Norway', 68.2343, 14.5683, 'Europe/Oslo'],
-  ['Trondheim', 'Trøndelag, Norway', 63.4305, 10.3951, 'Europe/Oslo'],
-  ['Bergen', 'Vestland, Norway', 60.3913, 5.3221, 'Europe/Oslo'],
-  ['Oslo', 'Oslo, Norway', 59.9139, 10.7522, 'Europe/Oslo'],
-  ['Stavanger', 'Rogaland, Norway', 58.9700, 5.7331, 'Europe/Oslo'],
-  ['Longyearbyen', 'Svalbard', 78.2232, 15.6267, 'Arctic/Longyearbyen'],
-  ['Kiruna', 'Norrbotten, Sweden', 67.8558, 20.2253, 'Europe/Stockholm'],
-  ['Stockholm', 'Sweden', 59.3293, 18.0686, 'Europe/Stockholm'],
-  ['Copenhagen', 'Denmark', 55.6761, 12.5683, 'Europe/Copenhagen'],
-  ['Reykjavík', 'Iceland', 64.1466, -21.9426, 'Atlantic/Reykjavik'],
-  ['London', 'England, United Kingdom', 51.5072, -0.1276, 'Europe/London'],
-  ['New York', 'New York, United States', 40.7128, -74.0060, 'America/New_York'],
-  ['Tokyo', 'Japan', 35.6762, 139.6503, 'Asia/Tokyo'],
-  ['Sydney', 'New South Wales, Australia', -33.8688, 151.2093, 'Australia/Sydney']
-].map(([name, sub, lat, lon, tz]) => ({ name, sub, lat, lon, tz }));
+const GAZ = [ // name, region, lat, lon, time zone, population, elevation m, landscape hint
+  ['Narvik', 'Nordland, Norway', 68.4385, 17.4272, 'Europe/Oslo', 14000, 10],
+  ['Oslo', 'Norway', 59.9139, 10.7522, 'Europe/Oslo', 709000, 23],
+  ['Zermatt', 'Valais, Switzerland', 46.0207, 7.7491, 'Europe/Zurich', 5800, 1608],
+  ['Santorini', 'South Aegean, Greece', 36.4166, 25.4323, 'Europe/Athens', 15500, 180],
+  ['Merzouga', 'Drâa-Tafilalet, Morocco', 31.0998, -4.0118, 'Africa/Casablanca', 4000, 700, 'desert'],
+  ['Phuket', 'Thailand', 7.8804, 98.3923, 'Asia/Bangkok', 80000, 10],
+  ['Bruges', 'West Flanders, Belgium', 51.2093, 3.2247, 'Europe/Brussels', 118000, 10],
+  ['Tokyo', 'Japan', 35.6762, 139.6503, 'Asia/Tokyo', 13960000, 40],
+  ['New York', 'New York, United States', 40.7128, -74.0060, 'America/New_York', 8336000, 10],
+  ['Longyearbyen', 'Svalbard', 78.2232, 15.6267, 'Arctic/Longyearbyen', 2400, 10],
+  ['Tromsø', 'Troms, Norway', 69.6492, 18.9553, 'Europe/Oslo', 77000, 10],
+  ['Bodø', 'Nordland, Norway', 67.2804, 14.4049, 'Europe/Oslo', 53000, 10],
+  ['Svolvær', 'Lofoten, Norway', 68.2343, 14.5683, 'Europe/Oslo', 4700, 10],
+  ['Trondheim', 'Trøndelag, Norway', 63.4305, 10.3951, 'Europe/Oslo', 212000, 10],
+  ['Bergen', 'Vestland, Norway', 60.3913, 5.3221, 'Europe/Oslo', 285000, 10],
+  ['Stavanger', 'Rogaland, Norway', 58.9700, 5.7331, 'Europe/Oslo', 145000, 10],
+  ['Kiruna', 'Norrbotten, Sweden', 67.8558, 20.2253, 'Europe/Stockholm', 18000, 530],
+  ['Stockholm', 'Sweden', 59.3293, 18.0686, 'Europe/Stockholm', 975000, 28],
+  ['Copenhagen', 'Denmark', 55.6761, 12.5683, 'Europe/Copenhagen', 660000, 10],
+  ['Reykjavík', 'Iceland', 64.1466, -21.9426, 'Atlantic/Reykjavik', 140000, 20],
+  ['Nice', 'Provence-Alpes-Côte d’Azur, France', 43.7102, 7.2620, 'Europe/Paris', 342000, 10],
+  ['London', 'England, United Kingdom', 51.5072, -0.1276, 'Europe/London', 8900000, 20],
+  ['Dubai', 'United Arab Emirates', 25.2048, 55.2708, 'Asia/Dubai', 3600000, 5],
+  ['Sydney', 'New South Wales, Australia', -33.8688, 151.2093, 'Australia/Sydney', 5300000, 30]
+].map(([name, sub, lat, lon, tz, pop, elev, biome]) => ({ name, sub, lat, lon, tz, pop, elev, biome }));
 
 /* ---------- small utils ---------- */
 const $ = (id) => document.getElementById(id);
@@ -559,7 +568,7 @@ async function fetchLive(place) {
     temp: c.temperature_2m, feels: c.apparent_temperature, rh: c.relative_humidity_2m, precip: c.precipitation,
     code: c.weather_code, cloud: c.cloud_cover, pres: c.pressure_msl, wind: c.wind_speed_10m, dir: c.wind_direction_10m, gust: c.wind_gusts_10m
   };
-  return { place: Object.assign({}, place, { tz }), tz, hourly, daily, current, air: null, live: true, updated: Date.now() };
+  return { place: Object.assign({}, place, { tz, elev: place.elev ?? j.elevation }), tz, hourly, daily, current, air: null, live: true, updated: Date.now() };
 }
 
 async function fetchAir(place) {
@@ -575,7 +584,7 @@ async function geocode(q) {
   const j = await getJSON(CFG.geocodeURL + '?' + p);
   return (j.results || []).map(r => ({
     name: r.name, sub: [r.admin1, r.country].filter(Boolean).join(', '),
-    lat: r.latitude, lon: r.longitude, tz: safeTZ(r.timezone || 'UTC')
+    lat: r.latitude, lon: r.longitude, tz: safeTZ(r.timezone || 'UTC'), pop: r.population || 0, elev: r.elevation
   }));
 }
 
@@ -604,7 +613,8 @@ function exampleData(place) {
   const seasonal = Math.cos((m - 6.4) / 12 * 2 * Math.PI);
   const alat = Math.abs(place.lat);
   const base = 29 - alat * 0.40 + seasonal * (3 + alat * 0.17);
-  const diAmp = alat > 60 ? 1.6 : 3.4;
+  const dry = classify(place, null) === 'desert';
+  const diAmp = dry ? 8 : alat > 60 ? 1.6 : 3.4;
   const hourly = [];
   for (let i = 0; i < 240; i++) {
     const t = start + i * 3600e3, rel = i - nowIdx;
@@ -615,13 +625,14 @@ function exampleData(place) {
     const lh = localHour(t, tz);
     const temp = base + L(6) + diAmp * Math.sin((lh - 9) / 24 * 2 * Math.PI) + (rnd() - 0.5) * 0.4;
     let code = A[1];
+    if (dry) code = code >= 45 ? (A[2] > 80 ? 2 : 1) : code;
     if (temp < -0.5 && R2S[code]) code = R2S[code];
     if (temp > 2.5 && S2R[code]) code = S2R[code];
-    const cloud = clamp(lerp(A[2], B[2], smooth(B[0] - 3, B[0], rel) * 0.7) + (rnd() - 0.5) * 8, 0, 100);
+    const cloud = clamp(lerp(A[2], B[2], smooth(B[0] - 3, B[0], rel) * 0.7) * (dry ? 0.3 : 1) + (rnd() - 0.5) * 8, 0, 100);
     const precip = code >= 51 ? Math.max(0.1, A[3] * (0.7 + rnd() * 0.6)) : 0;
     const wind = Math.max(0.3, L(4) * (0.85 + rnd() * 0.3));
     const dir = lerpAngle(A[5], B[5], q);
-    const rh = clamp(68 + cloud * 0.22 + (precip > 0 ? 10 : 0) + (code === 45 ? 25 : 0) - (lh > 11 && lh < 17 ? 7 : 0), 30, 100);
+    const rh = dry ? clamp(18 + cloud * 0.15 + (lh < 7 ? 10 : 0), 8, 45) : clamp(68 + cloud * 0.22 + (precip > 0 ? 10 : 0) + (code === 45 ? 25 : 0) - (lh > 11 && lh < 17 ? 7 : 0), 30, 100);
     const sp = sunPos(t + 1800e3, place.lat, place.lon);
     const kind = codeKind(code);
     const vis = code === 45 ? 300 : kind === 'heavysnow' ? 1200 : kind === 'snow' || kind === 'snowshowers' ? 3500 : kind === 'heavyrain' || kind === 'thunder' ? 6000 : precip > 0 ? 14000 : 32000;
@@ -670,17 +681,47 @@ function prepare(d) {
   return d;
 }
 
+/* ---------- landscape type ---------- */
+const BIOME_LABEL = { nordic: 'Nordic', arctic: 'Arctic', temperate: 'Temperate', coast: 'Warm coast', desert: 'Desert', tropical: 'Tropical', mountain: 'Mountain', city: 'City' };
+const SEASONS = ['Winter', 'Spring', 'Summer', 'Autumn'];
+const seasonOf = m => (m === 11 || m <= 1) ? 0 : m <= 4 ? 1 : m <= 7 ? 2 : 3; // month already shifted for the southern hemisphere
+function classify(place, d) {
+  if (place.biome && BIOME_LABEL[place.biome]) return place.biome;
+  const alat = Math.abs(place.lat), elev = place.elev ?? 0, pop = place.pop ?? 0;
+  let meanT = null, meanRH = null, psum = null;
+  if (d && d.hourly && d.hourly.length) {
+    const H = d.hourly; meanT = 0; meanRH = 0; psum = 0;
+    H.forEach(r => { meanT += r.temp; meanRH += (r.rh ?? 70); psum += r.precip || 0; });
+    meanT /= H.length; meanRH /= H.length;
+  }
+  if (pop >= 1e6) return 'city';
+  if (elev >= 1200) return 'mountain';
+  if (alat >= 12 && alat <= 40 && meanRH != null && meanRH < 45 && psum < 5) return 'desert';
+  if (alat < 23.5 && (meanT == null || meanT > 18)) return 'tropical';
+  if (alat >= 70) return 'arctic';
+  if (alat >= 58) return 'nordic';
+  if (alat >= 23.5 && alat < 44.5 && (meanT == null || meanT > 9)) return 'coast';
+  return 'temperate';
+}
+function biomeText(key, monthShifted) {
+  const name = BIOME_LABEL[key] || 'Temperate';
+  return (key === 'desert' || key === 'tropical') ? name : `${name} · ${SEASONS[seasonOf(monthShifted)]}`;
+}
+
 /* ============================================================
    3D SCENE
    ============================================================ */
 const Scene = (() => {
-  if (!window.THREE) return { init() { return false; }, tick() {}, setTarget() {}, setTime() {}, ok: false };
+  if (!window.THREE) return { init() { return false; }, tick() {}, setTarget() {}, setTime() {}, setBiome() {}, ok: false };
   const R = 10, WATER_Y = 0.06, REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let ok = false, renderer, scene, camera, skyEl, canvas;
-  let terrain, tCol, tH, tNy, tJit, tHash, lastSnow = -99, lastVeg = '';
+  // landscape (rebuilt when the place changes)
+  let land = null, B = null, landKey = '', OX = 0, OZ = 0;
+  let terrain, tCol, tH, tNy, tJit, tHash, tX, tZ, tWet, lastSnow = -99, lastMonth = -1;
+  let props = [], boats = [], occ = [], sockG = null, winMat = null, cityMats = [], cityRoof = null;
+  // world (built once)
   let waterPos, waterBase, water, waterMat;
   let sunMesh, sunGlow, sunLight, moonLight, hemi, amb, moon, moonMat, stars, starMat;
-  let treeMat, roofMat, winMat, pennantG, penPos, penBase, boat, houseY = 0.5;
   const clouds = [];
   let rain, rainPos, rainMat, snow, snowPos, snowMat, snowPhase;
   let bolt, boltPos, boltMat, boltLife = 0, nextStrike = 2.5, flash = 0;
@@ -689,194 +730,432 @@ const Scene = (() => {
   const tg = Object.assign({}, st);
   let az = 0, az0 = 0, el = 0.36, dist = 34, targetY = 2.4, dragging = false, lastX = 0, lastY = 0, lastInteract = -1e9, visible = true, tAcc = 0, skyStr = '';
   const C = (h) => new THREE.Color(h);
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const UPV = new THREE.Vector3(0, 1, 0);
+  const SNOWC = new THREE.Color('#EEF2F5');
+  const waterBaseColor = new THREE.Color('#2B5D77');
 
   /* noise */
   function hash(x, y) { let h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; return (h >>> 0) / 4294967296; }
   function vnoise(x, y) { const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf); const a = hash(xi, yi), b = hash(xi + 1, yi), c = hash(xi, yi + 1), d = hash(xi + 1, yi + 1); return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v; }
   function fbm(x, y) { let s = 0, a = 0.5, f = 1; for (let i = 0; i < 5; i++) { s += a * vnoise(x * f, y * f); f *= 2.03; a *= 0.5; } return s / 0.96875; }
   function ridged(x, y) { let s = 0, a = 0.5, f = 1; for (let i = 0; i < 4; i++) { const v = 1 - Math.abs(vnoise(x * f, y * f) * 2 - 1); s += a * v * v; f *= 2.1; a *= 0.5; } return s / 0.9375; }
-  const fjordZ = x => 0.9 * Math.sin(x * 0.33 + 0.6) + 0.8;
+  const N = (x, z) => fbm((x + OX) * 0.17 + 11.3, (z + OZ) * 0.17 - 4.1);
+  const RG = (x, z) => ridged((x + OX) * 0.13 + 3.7, (z + OZ) * 0.13 + 8.2);
+  const PATCH = (x, z) => fbm((x + OX) * 0.35 + 5, (z + OZ) * 0.35 + 9);
+
   function heightAt(x, z) {
-    const r = Math.hypot(x, z) / R, dz = z - fjordZ(x);
-    const valley = smooth(0.6, 2.8, Math.abs(dz));
-    const n = fbm(x * 0.17 + 11.3, z * 0.17 - 4.1);
-    let h;
-    if (dz < 0) { const far = Math.min(1, -dz / 6.5), rg = ridged(x * 0.13 + 3.7, z * 0.13 + 8.2); h = 0.45 + n * 1.4 + far * (1.0 + rg * rg * 5.2); }
-    else h = 0.32 + n * 1.25 + Math.max(0, dz - 2.5) * 0.12;
-    h = h * valley - (1 - valley) * 0.55;
-    const fall = 1 - smooth(0.80, 1.0, r), rim = -0.4 + valley * 0.58;
+    const r = Math.hypot(x, z) / R, h = B.h(x, z), wet = B.wet(x, z);
+    const fall = 1 - smooth(0.80, 1.0, r), rim = lerp(0.18, -0.4, wet);
     return rim + (h - rim) * fall;
   }
   function normalY(x, z) { const e = 0.12, hx = heightAt(x + e, z) - heightAt(x - e, z), hz = heightAt(x, z + e) - heightAt(x, z - e); return 2 * e / Math.hypot(hx, 2 * e, hz); }
-  // scene axes: camera starts in the north (+Z) looking south. Azimuth A (deg from north, clockwise) → vector
+  // scene axes: camera starts in the north (+Z) looking south. Azimuth A (deg from north, clockwise) → [x, z]
   const dirVec = A => [-Math.sin(A * RAD), Math.cos(A * RAD)];
 
-  /* terrain colors */
-  const COL = { shore: C('#7D776A'), rock: C('#5E5A56'), tundra: C('#787564'), snow: C('#EEF2F5'), dark: C('#4A4F44') };
-  function vegColors(month) {
-    if (month >= 5 && month <= 7) return [C('#4E7A33'), C('#5E8A3A')];
-    if (month === 8) return [C('#6F7E35'), C('#556F33')];
-    if (month === 9) return [C('#A17A2C'), C('#55693A')];
-    if (month === 4) return [C('#647A3C'), C('#6F6A4D')];
-    return [C('#6E6A55'), C('#5B5E4C')];
-  }
-  const tmpC = new THREE.Color();
-  function recolor() {
-    const veg = vegColors(st.month), sl = st.snowline, n = tH.length;
-    for (let i = 0; i < n; i++) {
-      const h = tH[i], ny = tNy[i], j = tJit[i];
-      let base;
-      if (h < WATER_Y + 0.1) base = COL.shore;
-      else if (ny < 0.62) base = COL.rock;
-      else if (h > 3.1) base = COL.tundra;
-      else base = tHash[i] > 0.5 ? veg[0] : veg[1];
-      let sn = smooth(sl - 0.3, sl + 0.3, h + j * 3);
-      if (ny < 0.62) sn *= 0.5;
-      tmpC.copy(base).lerp(COL.snow, sn);
-      tCol[i * 3] = clamp(tmpC.r + j, 0, 1); tCol[i * 3 + 1] = clamp(tmpC.g + j, 0, 1); tCol[i * 3 + 2] = clamp(tmpC.b + j, 0, 1);
+  /* ---------- landscape types ---------- */
+  const fjordZ = x => 0.9 * Math.sin(x * 0.33 + 0.6) + 0.8;
+  const riverZ = x => 0.6 * Math.sin(x * 0.45 + 1.2) + 1.2;
+  const coastZ = x => 2.0 + 0.7 * Math.sin(x * 0.38 + 0.4);
+  const tropZ = x => 2.3 + 0.6 * Math.sin(x * 0.4 + 1.0);
+  const quayZ = x => 3.4 + 0.35 * Math.sin(x * 0.5);
+  const OASIS = [-2.2, 1.8], LAKE = [0.6, 1.8], CELL = 1.6, ROAD = 0.22;
+  const cellIx = v => Math.floor((v + 40) / CELL);
+  const isPark = (ix, iz) => hash(ix * 3 + 7, iz * 5 + 1) < 0.17;
+  const isRoad = (x, z) => { const gx = ((x + 40) % CELL + CELL) % CELL, gz = ((z + 40) % CELL + CELL) % CELL; return gx < ROAD || gz < ROAD; };
+  const VEG = {
+    nordic: m => m >= 5 && m <= 7 ? ['#4E7A33', '#5E8A3A'] : m === 8 ? ['#6F7E35', '#556F33'] : m === 9 ? ['#A17A2C', '#55693A'] : m === 4 ? ['#647A3C', '#6F6A4D'] : ['#6E6A55', '#5B5E4C'],
+    arctic: m => m >= 5 && m <= 8 ? ['#6E7A4A', '#7C7A55'] : ['#7A7258', '#6B6A55'],
+    temperate: m => [['#6F7258', '#7A735E'], ['#6E9A3E', '#7FA84A'], ['#5B8A35', '#6A9A3C'], ['#7E7A3A', '#8C6E3A']][seasonOf(m)],
+    coast: m => [['#6F8A45', '#7C8E4E'], ['#7E9446', '#8E9A55'], ['#A69458', '#8F8A52'], ['#8C8E50', '#7E8448']][seasonOf(m)],
+    green: m => [['#6F7258', '#77735E'], ['#7FA84A', '#6E9A3E'], ['#5E8E38', '#6D9A40'], ['#8F8A45', '#7E6E3A']][seasonOf(m)]
+  };
+  const FIELDS = [['#6F7258', '#7A735E', '#857A62', '#6A6E58'], ['#6E9A3E', '#8DBE52', '#7A8B3E', '#8E7C5A'], ['#5B8A35', '#B8A04A', '#7FA84A', '#C9B25A'], ['#8C6E3A', '#7E7A3A', '#9A7A4A', '#6E7A3A']];
+
+  const BIOMES = {
+    nordic: {
+      water: '#2B5D77', seed: 11,
+      h(x, z) {
+        const dz = z - fjordZ(x), valley = smooth(0.6, 2.8, Math.abs(dz)), n = N(x, z); let h;
+        if (dz < 0) { const far = Math.min(1, -dz / 6.5), rg = RG(x, z); h = 0.45 + n * 1.4 + far * (1.0 + rg * rg * 5.2); }
+        else h = 0.32 + n * 1.25 + Math.max(0, dz - 2.5) * 0.12;
+        return h * valley - (1 - valley) * 0.55;
+      },
+      wet: (x, z) => 1 - smooth(0.6, 2.8, Math.abs(z - fjordZ(x))),
+      ground(o, h, ny, wet, x, z, m, hs) {
+        if (h < WATER_Y + 0.1) o.set('#7D776A'); else if (ny < 0.62) o.set('#5E5A56'); else if (h > 3.1) o.set('#787564');
+        else o.set(VEG[this.veg || 'nordic'](m)[hs > 0.5 ? 0 : 1]);
+      },
+      props(rng) {
+        const arctic = this.veg === 'arctic';
+        const first = addHouses({ n: arctic ? 2 : 3, zone: (x, z, h, ny) => { const dz = z - fjordZ(x); return dz > 1.0 && dz < 3.6 && h < 1.3 && ny > 0.9; },
+          w: [0.75, 1.0], d: [0.55, 0.7], hgt: [0.5, 0.62], walls: arctic ? ['#9E2B23', '#3E5C76', '#C9A227'] : ['#9E2B23', '#B8862A', '#E8E2D6'], roofs: ['#5E6B35', '#3B3B3D'], roof: 'gable', roofH: 0.42 }, rng);
+        if (!arctic) addTrees('pine', 110, (x, z, h, ny) => h > WATER_Y + 0.18 && h < 2.6 && ny > 0.8 && PATCH(x, z) > 0.47, rng, 0.65, 1.3);
+        addBoats(1, rng); addSockNear(first, rng);
+      }
+    },
+    temperate: {
+      water: '#3D6A6E', seed: 23,
+      h(x, z) {
+        const dz = z - riverZ(x), valley = smooth(0.35, 1.1, Math.abs(dz)), n = N(x, z);
+        const h0 = 0.3 + n * 1.0 + (dz < 0 ? Math.min(1, -dz / 7) * (0.5 + RG(x, z) * 1.5) : 0.1 * Math.max(0, dz - 2));
+        return h0 * valley - (1 - valley) * 0.45;
+      },
+      wet: (x, z) => 1 - smooth(0.35, 1.1, Math.abs(z - riverZ(x))),
+      ground(o, h, ny, wet, x, z, m, hs) {
+        if (h < WATER_Y + 0.08) { o.set('#7A7360'); return; }
+        if (ny < 0.6) { o.set('#77736A'); return; }
+        if (h < 1.5 && ny > 0.86) { const f = hash(Math.floor((x * 0.8 + z * 0.25 + 40) / 1.3), Math.floor((z * 0.8 - x * 0.2 + 40) / 1.1)); o.set(FIELDS[seasonOf(m)][Math.floor(f * 4)]); return; }
+        o.set(VEG.temperate(m)[hs > 0.5 ? 0 : 1]);
+      },
+      props(rng) {
+        const first = addHouses({ n: 11, zone: (x, z, h, ny) => { const dz = z - riverZ(x); return dz > 0.8 && dz < 4 && h < 1.2 && ny > 0.9 && x > -7 && x < 4; },
+          w: [0.6, 0.95], d: [0.5, 0.7], hgt: [0.45, 0.7], walls: ['#E7DCC4', '#B5654A', '#D9CBA8', '#F0ECE4'], roofs: ['#8E3B2E', '#5A5B60', '#7A3A2A'], roof: 'gable', roofH: 0.5 }, rng);
+        addTrees('broad', 120, (x, z, h, ny) => h > WATER_Y + 0.15 && ny > 0.78 && PATCH(x, z) > 0.42, rng, 0.75, 1.3);
+        addTrees('pine', 30, (x, z, h, ny) => h > 1.5 && ny > 0.75, rng, 0.7, 1.2);
+        addBoats(1, rng, 0.75); addSockNear(first, rng);
+      }
+    },
+    coast: {
+      water: '#2876A0', seed: 37,
+      h(x, z) { const d = coastZ(x) - z; if (d < 0) return Math.max(-0.6, 0.12 + d * 0.55); const n = N(x, z), rg = RG(x, z); return 0.12 + smooth(0, 1.2, d) * 0.25 + Math.max(0, d - 1) * 0.2 * (0.6 + n) + rg * rg * 1.8 * smooth(3, 8, d); },
+      wet: (x, z) => 1 - smooth(-0.15, 0.35, coastZ(x) - z),
+      ground(o, h, ny, wet, x, z, m, hs) { const d = coastZ(x) - z; if (h < WATER_Y + 0.06) o.set('#C9B78C'); else if (d < 1.3 && h < 0.5) o.set('#DCCB9E'); else if (ny < 0.62) o.set('#A89680'); else o.set(VEG.coast(m)[hs > 0.5 ? 0 : 1]); },
+      props(rng) {
+        const first = addHouses({ n: 13, zone: (x, z, h, ny) => { const d = coastZ(x) - z; return d > 1.3 && d < 5.5 && ny > 0.8; },
+          w: [0.55, 0.85], d: [0.5, 0.75], hgt: [0.4, 0.62], walls: ['#F4F1EA', '#EFE6D2', '#F7F3EC'], roofs: ['#E9E4DA'], roof: 'flat', rot: 0 }, rng);
+        addTrees('cypress', 26, (x, z, h, ny) => coastZ(x) - z > 1.5 && ny > 0.75, rng, 0.8, 1.3);
+        addTrees('olive', 45, (x, z, h, ny) => coastZ(x) - z > 1.2 && ny > 0.7 && h < 3, rng, 0.8, 1.2);
+        addBoats(2, rng); addSockNear(first, rng);
+      }
+    },
+    tropical: {
+      water: '#1E8C9C', seed: 41,
+      h(x, z) { const d = tropZ(x) - z; if (d < 0) return Math.max(-0.6, 0.12 + d * 0.5); const n = N(x, z); return 0.12 + smooth(0, 1, d) * 0.22 + Math.max(0, d - 1.3) * 0.24 * (0.7 + n * 0.6) + 3.4 * Math.exp(-((x + 1.5) ** 2 + (z + 5.5) ** 2) / 12) * smooth(1, 4, d); },
+      wet: (x, z) => 1 - smooth(-0.15, 0.35, tropZ(x) - z),
+      ground(o, h, ny, wet, x, z, m, hs) { const d = tropZ(x) - z; if (h < WATER_Y + 0.06) o.set('#D9C9A0'); else if (d < 1.3 && h < 0.55) o.set('#E6D6A8'); else if (ny < 0.55) o.set('#5C5A4E'); else o.set(hs > 0.5 ? '#3F7A2E' : '#4E8A33'); },
+      props(rng) {
+        const first = addHouses({ n: 5, allowWater: true, zone: (x, z, h, ny) => { const d = tropZ(x) - z; return d > -0.5 && d < 0.7 && Math.abs(x) < 7; },
+          w: [0.6, 0.8], d: [0.5, 0.65], hgt: [0.35, 0.45], walls: ['#9C7A52', '#8A6A45'], roofs: ['#C9A85C', '#B89650'], roof: 'pyramid', roofH: 0.55, stilts: true, rot: 0 }, rng);
+        addTrees('palm', 34, (x, z, h, ny) => { const d = tropZ(x) - z; return d > 0.25 && d < 2.4 && h < 0.9; }, rng, 0.8, 1.25);
+        addTrees('jungle', 130, (x, z, h, ny) => tropZ(x) - z > 1.6 && ny > 0.62, rng, 0.75, 1.35, 0.32);
+        addBoats(2, rng); addSockNear(first, rng);
+      }
+    },
+    desert: {
+      water: '#2E7C88', seed: 53,
+      h(x, z) {
+        const n = N(x, z), s = Math.sin(x * 0.85 + z * 0.4 + n * 3.2) * 0.5 + 0.5; let h = 0.3 + s * s * 0.55 + n * 0.5;
+        const m1 = 1 - smooth(0.82, 1.0, Math.hypot((x - 3) / 1.7, (z + 5.2) / 1.25)), m2 = 1 - smooth(0.82, 1.0, Math.hypot((x + 4.6) / 1.35, (z + 3.6) / 1.1));
+        h = Math.max(h, 0.3 + 2.5 * m1, 0.3 + 1.8 * m2);
+        const od = Math.hypot(x - OASIS[0], z - OASIS[1]); h -= (1 - smooth(1.0, 2.6, od)) * 0.2;
+        return lerp(h, -0.35, 1 - smooth(0.85, 1.3, od));
+      },
+      wet: (x, z) => 1 - smooth(0.85, 1.3, Math.hypot(x - OASIS[0], z - OASIS[1])),
+      ground(o, h, ny, wet, x, z, m, hs) {
+        const od = Math.hypot(x - OASIS[0], z - OASIS[1]);
+        if (h < WATER_Y + 0.08) o.set('#B89F72'); else if (od < 2.0 && h < 0.55) o.set(hs > 0.5 ? '#6E8A3E' : '#7F9447');
+        else if (h > 1.05 || ny < 0.6) o.set(Math.floor(h * 3.2) % 2 ? '#B5754A' : '#9E5A36'); else o.set(hs > 0.5 ? '#DDBB7E' : '#D2AC6A');
+      },
+      props(rng) {
+        const od = (x, z) => Math.hypot(x - OASIS[0], z - OASIS[1]);
+        const first = addHouses({ n: 4, zone: (x, z, h, ny) => od(x, z) > 1.5 && od(x, z) < 2.8 && ny > 0.85, w: [0.6, 0.9], d: [0.55, 0.8], hgt: [0.38, 0.55], walls: ['#C99B6B', '#D4A877', '#BF8F5F'], roofs: ['#B8895A'], roof: 'flat' }, rng);
+        addTrees('palm', 14, (x, z) => od(x, z) > 1.15 && od(x, z) < 2.3, rng, 0.85, 1.25);
+        addTrees('cactus', 28, (x, z, h, ny) => od(x, z) > 2.6 && ny > 0.8 && h < 1.0, rng, 0.7, 1.3);
+        addSockNear(first, rng);
+      }
+    },
+    mountain: {
+      water: '#2F6E86', seed: 67,
+      h(x, z) {
+        const ld = Math.hypot(x - LAKE[0], z - LAKE[1]), rr = Math.hypot(x, z) / R, rg = RG(x, z);
+        const ring = smooth(0.32, 0.78, rr) * (1.3 + rg * rg * 6.2) * lerp(1, 0.38, smooth(1.5, 4.5, z));
+        const peak = 3.2 * Math.exp(-((x - 1) ** 2 + (z + 6) ** 2) / 7);
+        return lerp(0.45 + N(x, z) * 0.7 + ring + peak, -0.45, 1 - smooth(1.4, 1.9, ld));
+      },
+      wet: (x, z) => 1 - smooth(1.4, 1.9, Math.hypot(x - LAKE[0], z - LAKE[1])),
+      ground(o, h, ny, wet, x, z, m, hs) { if (h < WATER_Y + 0.1) o.set('#7D776A'); else if (ny < 0.6) o.set('#6E6C69'); else if (h > 3.2) o.set('#7E7B6A'); else o.set(VEG.green(m)[hs > 0.5 ? 0 : 1]); },
+      props(rng) {
+        const ld = (x, z) => Math.hypot(x - LAKE[0], z - LAKE[1]);
+        const first = addHouses({ n: 6, zone: (x, z, h, ny) => ld(x, z) > 1.9 && ld(x, z) < 4.4 && ny > 0.9 && h < 1.4, w: [0.6, 0.85], d: [0.55, 0.7], hgt: [0.45, 0.6], walls: ['#7A5236', '#8A6240', '#6B4A30'], roofs: ['#3B3633', '#4A4440'], roof: 'gable', roofH: 0.62 }, rng);
+        addTrees('pine', 150, (x, z, h, ny) => h > 0.5 && h < 3.4 && ny > 0.7, rng, 0.65, 1.25);
+        addTrees('broad', 14, (x, z) => ld(x, z) > 1.9 && ld(x, z) < 3.5, rng, 0.7, 1.1);
+        addBoats(1, rng, 0.7); addSockNear(first, rng);
+      }
+    },
+    city: {
+      water: '#34566A', seed: 79,
+      h(x, z) { const d = quayZ(x) - z; if (d < 0) return -0.5; const n = N(x, z); return 0.22 + n * 0.06 + smooth(5.5, 10, d) * (n * 1.3 + RG(x, z) * 0.9); },
+      wet: (x, z) => 1 - smooth(-0.04, 0.04, quayZ(x) - z),
+      ground(o, h, ny, wet, x, z, m, hs) {
+        const d = quayZ(x) - z;
+        if (wet > 0.5 || d < 0.12) o.set('#7F7B72'); else if (h > 0.6) o.set(VEG.green(m)[hs > 0.5 ? 0 : 1]);
+        else if (isRoad(x, z)) o.set('#47494E'); else if (isPark(cellIx(x), cellIx(z))) o.set(VEG.green(m)[hs > 0.5 ? 1 : 0]); else o.set('#8C8D89');
+      },
+      props(rng) {
+        addCity(rng);
+        addTrees('broad', 70, (x, z, h) => h < 0.6 && !isRoad(x, z) && isPark(cellIx(x), cellIx(z)), rng, 0.6, 1.0, 0.25);
+        addTrees('broad', 40, (x, z, h, ny) => h > 0.7 && ny > 0.75, rng, 0.7, 1.1);
+        addBoats(2, rng);
+        const q = spot(rng, (x, z, h) => { const d = quayZ(x) - z; return d > 0.25 && d < 0.6 && Math.abs(x) < 6; }, 0.2);
+        if (q) addSock(q.x, q.z);
+      }
     }
-    terrain.geometry.attributes.color.needsUpdate = true;
-    lastSnow = sl; lastVeg = String(st.month);
+  };
+  BIOMES.arctic = Object.assign({}, BIOMES.nordic, { veg: 'arctic', seed: 13 });
+
+  /* ---------- builders ---------- */
+  const cone = (r, h, s) => new THREE.ConeGeometry(r, h, s);
+  const cyl = (a, b, h, s = 6) => new THREE.CylinderGeometry(a, b, h, s);
+  const ico = r => new THREE.IcosahedronGeometry(r, 0);
+  function merge(list) {
+    const pos = [];
+    for (const g0 of list) { const g = g0.index ? g0.toNonIndexed() : g0; pos.push(...g.attributes.position.array); if (g !== g0) g.dispose(); g0.dispose(); }
+    const out = new THREE.BufferGeometry(); out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); out.computeVertexNormals(); return out;
+  }
+  const pick = (arr, r) => arr[Math.min(arr.length - 1, Math.floor(r * arr.length))];
+  const KIND = {
+    pine: () => [
+      { geo: merge([cone(0.28, 0.62, 6).translate(0, 0.42, 0), cone(0.2, 0.5, 6).translate(0, 0.78, 0)]), color: (s, r) => r < 0.5 ? '#2E4A31' : '#34503A', snow: 0.85, top: 1.0 },
+      { geo: cyl(0.035, 0.05, 0.22, 5).translate(0, 0.11, 0), color: () => '#4A3A2C' }],
+    broad: () => [
+      { geo: ico(0.32).scale(1, 0.85, 1).translate(0, 0.62, 0), color: (s, r) => s === 0 ? '#7D7266' : s === 1 ? (r < 0.5 ? '#8DBE52' : '#7DB04A') : s === 2 ? (r < 0.5 ? '#4F8A35' : '#5A9A3C') : pick(['#D9822B', '#C9572A', '#E2B33C', '#9C6B2E', '#B8862E'], r), snow: 0.6, top: 0.9 },
+      { geo: cyl(0.04, 0.06, 0.42, 5).translate(0, 0.21, 0), color: () => '#5A4632' }],
+    jungle: () => [
+      { geo: ico(0.45).scale(1.1, 0.7, 1.1).translate(0, 0.8, 0), color: (s, r) => pick(['#2F6E2A', '#3E8A33', '#2A5F26'], r), top: 1.1 },
+      { geo: cyl(0.05, 0.07, 0.6, 5).translate(0, 0.3, 0), color: () => '#5A4632' }],
+    cypress: () => [
+      { geo: cone(0.13, 1.0, 6).translate(0, 0.6, 0), color: (s, r) => r < 0.5 ? '#2F4A2C' : '#35522F', snow: 0.5, top: 1.1 },
+      { geo: cyl(0.03, 0.04, 0.12, 5).translate(0, 0.06, 0), color: () => '#5E4B3A' }],
+    olive: () => [
+      { geo: ico(0.26).scale(1.2, 0.7, 1.2).translate(0, 0.4, 0), color: (s, r) => r < 0.5 ? '#7D8F68' : '#8A9A70', snow: 0.5, top: 0.55 },
+      { geo: cyl(0.035, 0.06, 0.28, 5).translate(0, 0.14, 0), color: () => '#5E4B3A' }],
+    palm: () => {
+      const fronds = [];
+      for (let k = 0; k < 6; k++) fronds.push(cone(0.11, 0.75, 4).scale(0.3, 1, 1).rotateZ(-(Math.PI / 2 + 0.32)).translate(0.33, -0.1, 0).rotateY(k * Math.PI / 3 + 0.3).translate(0.07, 1.1, 0));
+      return [
+        { geo: merge(fronds), color: (s, r) => r < 0.5 ? '#4F8A35' : '#5E9A3C', top: 1.1 },
+        { geo: cyl(0.035, 0.055, 1.12, 5).rotateZ(-0.06).translate(0.035, 0.56, 0), color: () => '#8A6E4A' }];
+    },
+    cactus: () => [
+      { geo: merge([cyl(0.08, 0.09, 0.9, 6).translate(0, 0.45, 0), cyl(0.05, 0.05, 0.26, 5).rotateZ(Math.PI / 2).translate(0.15, 0.42, 0), cyl(0.05, 0.05, 0.3, 5).translate(0.27, 0.56, 0), cyl(0.05, 0.05, 0.22, 5).rotateZ(Math.PI / 2).translate(-0.13, 0.32, 0), cyl(0.05, 0.05, 0.24, 5).translate(-0.23, 0.43, 0)]), color: (s, r) => r < 0.5 ? '#4E7A44' : '#5A8A4C', top: 0.9 }]
+  };
+  const stdMat = () => new THREE.MeshStandardMaterial({ color: '#FFFFFF', flatShading: true, roughness: 0.95 });
+  function freeAt(x, z, rad) { for (const o of occ) if (Math.hypot(x - o[0], z - o[1]) < rad + o[2]) return false; return true; }
+  function spot(rng, zone, rad, allowWater) {
+    for (let k = 0; k < 500; k++) {
+      const a = rng() * Math.PI * 2, r = Math.sqrt(rng()) * 9.0, x = Math.cos(a) * r, z = Math.sin(a) * r, h = heightAt(x, z);
+      if (!allowWater && h < WATER_Y + 0.08) continue;
+      const ny = normalY(x, z);
+      if (!zone(x, z, h, ny) || !freeAt(x, z, rad)) continue;
+      occ.push([x, z, rad]); return { x, z, h, ny };
+    }
+    return null;
+  }
+  function register(mesh, rnd, ys, colorFn, snowK) { props.push({ mesh, rnd, ys, colorFn, snowK: snowK || 0 }); }
+  function addTrees(kind, n, zone, rng, sMin = 0.7, sMax = 1.3, rad = 0.28) {
+    const spots = []; for (let i = 0; i < n; i++) { const s = spot(rng, zone, rad); if (!s) break; spots.push(s); }
+    if (!spots.length) return;
+    const items = spots.map(s => { const sc = sMin + rng() * (sMax - sMin); return { m: new THREE.Matrix4().compose(V(s.x, s.h - 0.04, s.z), new THREE.Quaternion().setFromAxisAngle(UPV, rng() * 6.28), V(sc, sc * (0.9 + rng() * 0.3), sc)), y: s.h, sc, r: rng() }; });
+    KIND[kind]().forEach(p => {
+      const mesh = new THREE.InstancedMesh(p.geo, stdMat(), items.length);
+      mesh.castShadow = true; mesh.receiveShadow = true;
+      items.forEach((it, i) => mesh.setMatrixAt(i, it.m)); mesh.instanceMatrix.needsUpdate = true;
+      register(mesh, items.map(it => it.r), items.map(it => it.y + (p.top || 0) * it.sc), p.color, p.snow);
+      land.add(mesh);
+    });
+  }
+  function addHouses(o, rng) {
+    const list = [];
+    for (let i = 0; i < o.n; i++) { const s = spot(rng, o.zone, 0.75, o.allowWater); if (!s) break; list.push(s); }
+    if (!list.length) return null;
+    const n = list.length;
+    const walls = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), stdMat(), n);
+    let roofG = null;
+    if (o.roof === 'gable') { const sh = new THREE.Shape(); sh.moveTo(-0.5, 0); sh.lineTo(0.5, 0); sh.lineTo(0, 1); sh.lineTo(-0.5, 0); roofG = new THREE.ExtrudeGeometry(sh, { depth: 1, bevelEnabled: false }).translate(0, 0, -0.5); }
+    else if (o.roof === 'pyramid') roofG = new THREE.ConeGeometry(0.72, 1, 4).rotateY(Math.PI / 4).translate(0, 0.5, 0);
+    else roofG = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+    const roofs = new THREE.InstancedMesh(roofG, stdMat(), n);
+    const wins = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), winMat, n * 2);
+    const posts = o.stilts ? new THREE.InstancedMesh(merge([0, 1, 2, 3].map(k => cyl(0.04, 0.04, 1, 5).translate(k & 1 ? 0.38 : -0.38, 0.5, k & 2 ? 0.3 : -0.3))), stdMat(), n) : null;
+    const wr = [], wy = [], rr = [], ry = [];
+    const one = V(1, 1, 1), qI = new THREE.Quaternion();
+    list.forEach((s, i) => {
+      const w = lerp(o.w[0], o.w[1], rng()), d = lerp(o.d[0], o.d[1], rng()), hh = lerp(o.hgt[0], o.hgt[1], rng());
+      const q = new THREE.Quaternion().setFromAxisAngle(UPV, (rng() - 0.5) * (o.rot === 0 ? 0.3 : 0.9));
+      const base = o.stilts ? Math.max(s.h, WATER_Y) + 0.38 : s.h - 0.05;
+      walls.setMatrixAt(i, new THREE.Matrix4().compose(V(s.x, base, s.z), q, V(w, hh, d)));
+      const rh = o.roof === 'flat' ? 0.06 : (o.roofH || 0.45) * w;
+      roofs.setMatrixAt(i, new THREE.Matrix4().compose(V(s.x, base + hh, s.z), q, o.roof === 'flat' ? V(w * 1.04, rh, d * 1.04) : V(w * 1.12, rh, d * 1.1)));
+      if (posts) posts.setMatrixAt(i, new THREE.Matrix4().compose(V(s.x, base - 0.9, s.z), q, V(w, 0.9, d)));
+      const hm = new THREE.Matrix4().compose(V(s.x, base, s.z), q, one);
+      [-1, 1].forEach((sg, k) => wins.setMatrixAt(i * 2 + k, hm.clone().multiply(new THREE.Matrix4().compose(V(sg * w * 0.24, hh * 0.55, d / 2 + 0.012), qI, V(w * 0.18, hh * 0.24, 1)))));
+      wr.push(rng()); wy.push(base + hh); rr.push(rng()); ry.push(base + hh + rh);
+    });
+    [walls, roofs, wins, posts].forEach(m => { if (!m) return; m.instanceMatrix.needsUpdate = true; m.castShadow = m !== wins; m.receiveShadow = true; land.add(m); });
+    register(walls, wr, wy, (s, r) => pick(o.walls, r), 0);
+    register(roofs, rr, ry, (s, r) => pick(o.roofs, r), o.roof === 'flat' ? 0.6 : 1);
+    if (posts) register(posts, wr, wy, () => '#6B5640', 0);
+    return list[0];
+  }
+  function canvasTex(w, h, draw) { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d')); const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t; }
+  function addCity(rng) {
+    const facade = canvasTex(128, 128, x => { x.fillStyle = '#FFFFFF'; x.fillRect(0, 0, 128, 128); x.fillStyle = '#5F7184'; for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) x.fillRect(i * 16 + 4, j * 16 + 4, 8, 9); });
+    const tints = ['#B9BDC2', '#D6CBB8', '#8FA9BF', '#A4A7AB'];
+    cityMats = tints.map(t => new THREE.MeshStandardMaterial({ color: t, map: facade, emissive: '#FFD58A', emissiveMap: canvasTex(128, 128, x => { x.fillStyle = '#000'; x.fillRect(0, 0, 128, 128); x.fillStyle = '#FFF'; for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) if (rng() < 0.42) x.fillRect(i * 16 + 4, j * 16 + 4, 8, 9); }), emissiveIntensity: 0, roughness: 0.55, metalness: 0.15, flatShading: true }));
+    cityRoof = new THREE.MeshStandardMaterial({ color: '#6E7175', roughness: 0.9, flatShading: true });
+    for (let ix = cellIx(-9); ix <= cellIx(9); ix++) for (let iz = cellIx(-9); iz <= cellIx(9); iz++) {
+      if (isPark(ix, iz)) continue;
+      const x0 = ix * CELL - 40 + ROAD, z0 = iz * CELL - 40 + ROAD, span = CELL - ROAD;
+      const split = rng() < 0.3 ? 2 : 1;
+      for (let k = 0; k < split; k++) {
+        const cx = x0 + span * (split === 1 ? 0.5 : 0.27 + k * 0.46), cz = z0 + span * 0.5;
+        if (Math.hypot(cx, cz) > 8.3 || quayZ(cx) - cz < 0.9) continue;
+        const gh = heightAt(cx, cz); if (gh > 0.6) continue;
+        const w = span * (split === 1 ? 0.62 + rng() * 0.28 : 0.38 + rng() * 0.06), d = span * (0.6 + rng() * 0.3);
+        const hh = 0.5 + 4.8 * Math.exp(-((cx - 0.3) ** 2 + (cz + 1.2) ** 2) / 10) * (0.5 + rng() * 0.9) + rng() * 0.4;
+        const g = new THREE.BoxGeometry(w, hh, d).translate(0, hh / 2, 0), uv = g.attributes.uv;
+        for (let f = 0; f < 6; f++) { if (f === 2 || f === 3) continue; const ext = f < 2 ? d : w; for (let v = f * 4; v < f * 4 + 4; v++) uv.setXY(v, uv.getX(v) * ext / 2.56, uv.getY(v) * hh / 2.9); }
+        const m = cityMats[Math.floor(rng() * cityMats.length)];
+        const mesh = new THREE.Mesh(g, [m, m, cityRoof, cityRoof, m, m]);
+        mesh.position.set(cx, gh - 0.02, cz); mesh.castShadow = true; mesh.receiveShadow = true;
+        land.add(mesh); occ.push([cx, cz, Math.max(w, d) * 0.6]);
+      }
+    }
+  }
+  function addBoats(n, rng, scale = 1) {
+    for (let b = 0; b < n; b++) for (let k = 0; k < 300; k++) {
+      const a = rng() * Math.PI * 2, r = Math.sqrt(rng()) * 8.6, x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (z < -2 || B.wet(x, z) < 0.98 || heightAt(x, z) > WATER_Y - 0.12 || !freeAt(x, z, 0.6)) continue;
+      occ.push([x, z, 0.6]);
+      const g = new THREE.Group();
+      const hull = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.14, 0.26), new THREE.MeshStandardMaterial({ color: '#F2F0EA', flatShading: true }));
+      const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.16, 0.18), new THREE.MeshStandardMaterial({ color: '#2B3B48', flatShading: true }));
+      cabin.position.set(-0.08, 0.14, 0); hull.castShadow = true; g.add(hull, cabin);
+      g.position.set(x, WATER_Y + 0.05, z); g.rotation.y = rng() * Math.PI; g.scale.setScalar(scale); g.userData.ph = rng() * 6;
+      land.add(g); boats.push(g); break;
+    }
+  }
+  function addSock(x, z) {
+    const h = heightAt(x, z);
+    const pole = new THREE.Mesh(cyl(0.02, 0.026, 1.5, 6), new THREE.MeshStandardMaterial({ color: '#E8E6E0' }));
+    pole.position.set(x, h + 0.75, z); pole.castShadow = true; land.add(pole);
+    const tex = canvasTex(8, 40, c => { for (let i = 0; i < 5; i++) { c.fillStyle = i % 2 ? '#F4F2EE' : '#E8571E'; c.fillRect(0, i * 8, 8, 8); } });
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    const sg = new THREE.CylinderGeometry(0.045, 0.11, 0.62, 10, 1, true).rotateZ(-Math.PI / 2).translate(0.31, 0, 0);
+    const sock = new THREE.Mesh(sg, new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide, roughness: 0.8 }));
+    sock.castShadow = true;
+    sockG = new THREE.Group(); sockG.position.set(x, h + 1.44, z); sockG.rotation.order = 'YZX'; sockG.add(sock); land.add(sockG);
+  }
+  function addSockNear(s, rng) {
+    const p = s ? spot(rng, (x, z, h, ny) => Math.hypot(x - s.x, z - s.z) < 1.8 && ny > 0.85, 0.15) : spot(rng, (x, z, h, ny) => ny > 0.9 && z > 0, 0.15);
+    if (p) addSock(p.x, p.z);
   }
 
   function radialGrid(rings, sectors, radius, fnY) {
     const pos = [], idx = [];
     pos.push(0, fnY(0, 0), 0);
-    for (let i = 1; i <= rings; i++) {
-      const r = radius * i / rings;
-      for (let j = 0; j < sectors; j++) { const a = j / sectors * Math.PI * 2, x = Math.cos(a) * r, z = Math.sin(a) * r; pos.push(x, fnY(x, z), z); }
-    }
+    for (let i = 1; i <= rings; i++) { const r = radius * i / rings; for (let j = 0; j < sectors; j++) { const a = j / sectors * Math.PI * 2, x = Math.cos(a) * r, z = Math.sin(a) * r; pos.push(x, fnY(x, z), z); } }
     for (let j = 0; j < sectors; j++) idx.push(0, 1 + (j + 1) % sectors, 1 + j);
-    for (let i = 1; i < rings; i++) {
-      const a0 = 1 + (i - 1) * sectors, a1 = 1 + i * sectors;
-      for (let j = 0; j < sectors; j++) {
-        const j1 = (j + 1) % sectors;
-        idx.push(a0 + j, a0 + j1, a1 + j, a0 + j1, a1 + j1, a1 + j);
-      }
-    }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    g.setIndex(idx);
-    return g;
+    for (let i = 1; i < rings; i++) { const a0 = 1 + (i - 1) * sectors, a1 = 1 + i * sectors; for (let j = 0; j < sectors; j++) { const j1 = (j + 1) % sectors; idx.push(a0 + j, a0 + j1, a1 + j, a0 + j1, a1 + j1, a1 + j); } }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); return g;
   }
-
   function spriteTex(inner, outer) {
     const c = document.createElement('canvas'); c.width = c.height = 64;
     const x = c.getContext('2d'), g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
-    g.addColorStop(0, inner); g.addColorStop(0.35, inner); g.addColorStop(1, outer);
-    x.fillStyle = g; x.fillRect(0, 0, 64, 64);
+    g.addColorStop(0, inner); g.addColorStop(0.35, inner); g.addColorStop(1, outer); x.fillStyle = g; x.fillRect(0, 0, 64, 64);
     return new THREE.CanvasTexture(c);
   }
 
+  function buildTerrain() {
+    const g = radialGrid(60, 150, R, heightAt), P = g.attributes.position, n = P.count;
+    tH = new Float32Array(n); tNy = new Float32Array(n); tJit = new Float32Array(n); tHash = new Float32Array(n); tX = new Float32Array(n); tZ = new Float32Array(n); tWet = new Float32Array(n); tCol = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { const x = P.getX(i), z = P.getZ(i); tX[i] = x; tZ[i] = z; tH[i] = P.getY(i); tNy[i] = normalY(x, z); tWet[i] = B.wet(x, z); tJit[i] = (hash(i * 7, 3) - 0.5) * 0.06; tHash[i] = fbm(x * 0.9 + 40, z * 0.9 - 7); }
+    g.setAttribute('color', new THREE.BufferAttribute(tCol, 3));
+    terrain = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95, metalness: 0 }));
+    terrain.castShadow = true; terrain.receiveShadow = true; land.add(terrain);
+    // skirt: the cut-away sides of the diorama
+    const S = 150, sp = [], sc = [], si = [], radii = [R, R * 0.985, R * 0.9], levels = [null, -0.65, -2.6];
+    const rock = C('#5A4C40'), rock2 = C('#45392F'), deep = C('#2A231D'), wTop = C(B.water).multiplyScalar(0.8), wMid = C(B.water).multiplyScalar(0.55);
+    for (let l = 0; l < 3; l++) for (let j = 0; j < S; j++) {
+      const a = j / S * Math.PI * 2, rx = Math.cos(a) * R, rz = Math.sin(a) * R, hr = heightAt(rx, rz), wetEdge = hr < WATER_Y;
+      sp.push(Math.cos(a) * radii[l], l === 0 ? Math.max(hr, WATER_Y) : levels[l], Math.sin(a) * radii[l]);
+      const c = l === 0 ? (wetEdge ? wTop : rock) : l === 1 ? (wetEdge ? wMid : rock2) : deep; sc.push(c.r, c.g, c.b);
+    }
+    for (let l = 0; l < 2; l++) for (let j = 0; j < S; j++) { const j1 = (j + 1) % S, a = l * S + j, b = l * S + j1, c = (l + 1) * S + j, d = (l + 1) * S + j1; si.push(a, c, b, b, c, d); }
+    const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3)); sg.setAttribute('color', new THREE.Float32BufferAttribute(sc, 3)); sg.setIndex(si);
+    const skirt = new THREE.Mesh(sg, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1, side: THREE.DoubleSide }));
+    skirt.receiveShadow = true; land.add(skirt);
+    const bottom = new THREE.Mesh(new THREE.CircleGeometry(R * 0.9, 64), new THREE.MeshStandardMaterial({ color: '#221C17', roughness: 1 }));
+    bottom.rotation.x = Math.PI / 2; bottom.position.y = -2.6; land.add(bottom);
+  }
+  function disposeLand() {
+    if (!land) return;
+    land.traverse(o => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { if (m.map) m.map.dispose(); if (m.emissiveMap) m.emissiveMap.dispose(); m.dispose(); });
+    });
+    scene.remove(land); land = null;
+  }
+  function buildLand(key, place) {
+    disposeLand();
+    B = Object.assign({ key }, BIOMES[key] || BIOMES.temperate);
+    land = new THREE.Group(); scene.add(land);
+    occ = []; props = []; boats = []; sockG = null; cityMats = []; cityRoof = null;
+    winMat = new THREE.MeshBasicMaterial({ color: '#2A2B2E' });
+    buildTerrain();
+    B.props(mulberry32(B.seed * 1000 + Math.round(Math.abs(place.lat) * 100) * 31 + Math.round(Math.abs(place.lon) * 100)));
+    waterBaseColor.set(B.water);
+    lastSnow = -99; lastMonth = -1; recolor();
+    if (canvas) canvas.setAttribute('aria-label', `3D view of the weather over a small ${BIOME_LABEL[key].toLowerCase()} landscape. Drag sideways to turn it.`);
+  }
+  function setBiome(key, place) {
+    const k = key + '|' + place.lat.toFixed(2) + '|' + place.lon.toFixed(2);
+    if (k === landKey || !ok) return;
+    landKey = k;
+    OX = hash(Math.round(place.lon * 100), 17) * 40; OZ = hash(Math.round(place.lat * 100), 31) * 40;
+    st.lat = place.lat; st.lon = place.lon; st.south = place.lat < 0;
+    buildLand(key, place);
+  }
+
+  const tmpC = new THREE.Color();
+  function recolor() {
+    if (!land) return;
+    const sl = st.snowline, m = st.month, n = tH.length;
+    for (let i = 0; i < n; i++) {
+      const h = tH[i], ny = tNy[i], j = tJit[i];
+      B.ground(tmpC, h, ny, tWet[i], tX[i], tZ[i], m, tHash[i]);
+      let sn = smooth(sl - 0.3, sl + 0.3, h + j * 3); if (ny < 0.62) sn *= 0.5; if (h < WATER_Y + 0.02) sn = 0;
+      tmpC.lerp(SNOWC, sn);
+      tCol[i * 3] = clamp(tmpC.r + j, 0, 1); tCol[i * 3 + 1] = clamp(tmpC.g + j, 0, 1); tCol[i * 3 + 2] = clamp(tmpC.b + j, 0, 1);
+    }
+    terrain.geometry.attributes.color.needsUpdate = true;
+    const season = seasonOf(m);
+    for (const p of props) {
+      for (let i = 0; i < p.mesh.count; i++) {
+        tmpC.set(p.colorFn(season, p.rnd[i]));
+        if (p.snowK) tmpC.lerp(SNOWC, (1 - smooth(p.ys[i] + 0.2, p.ys[i] + 0.8, sl)) * 0.9 * p.snowK);
+        p.mesh.setColorAt(i, tmpC);
+      }
+      if (p.mesh.instanceColor) p.mesh.instanceColor.needsUpdate = true;
+    }
+    lastSnow = sl; lastMonth = m;
+  }
+
+  /* ---------- the world: water, sky, weather ---------- */
   function build() {
     const rng = mulberry32(20261025);
-    /* terrain */
-    const tg_ = radialGrid(52, 132, R, heightAt);
-    const P = tg_.attributes.position, n = P.count;
-    tH = new Float32Array(n); tNy = new Float32Array(n); tJit = new Float32Array(n); tHash = new Float32Array(n); tCol = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) { const x = P.getX(i), z = P.getZ(i); tH[i] = P.getY(i); tNy[i] = normalY(x, z); tJit[i] = (hash(i * 7, 3) - 0.5) * 0.06; tHash[i] = fbm(x * 0.9 + 40, z * 0.9 - 7); }
-    tg_.setAttribute('color', new THREE.BufferAttribute(tCol, 3));
-    terrain = new THREE.Mesh(tg_, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95, metalness: 0 }));
-    terrain.castShadow = true; terrain.receiveShadow = true;
-    scene.add(terrain);
-
-    /* skirt (cut-away sides of the diorama) */
-    const S = 132, sp = [], sc = [], si = [];
-    const levels = [null, -0.65, -2.6], radii = [R, R * 0.985, R * 0.9];
-    for (let l = 0; l < 3; l++) for (let j = 0; j < S; j++) {
-      const a = j / S * Math.PI * 2, rr = radii[l], x = Math.cos(a) * rr, z = Math.sin(a) * rr;
-      const top = Math.max(heightAt(Math.cos(a) * R, Math.sin(a) * R), WATER_Y);
-      const wet = heightAt(Math.cos(a) * R, Math.sin(a) * R) < WATER_Y;
-      sp.push(x, l === 0 ? top : levels[l], z);
-      const c = l === 0 ? (wet ? C('#2C5A73') : C('#5A4C40')) : l === 1 ? (wet ? C('#1E3E52') : C('#45392F')) : C('#2A231D');
-      sc.push(c.r, c.g, c.b);
-    }
-    for (let l = 0; l < 2; l++) for (let j = 0; j < S; j++) {
-      const j1 = (j + 1) % S, a = l * S + j, b = l * S + j1, c = (l + 1) * S + j, d = (l + 1) * S + j1;
-      si.push(a, c, b, b, c, d);
-    }
-    const sg = new THREE.BufferGeometry();
-    sg.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));
-    sg.setAttribute('color', new THREE.Float32BufferAttribute(sc, 3));
-    sg.setIndex(si);
-    const skirt = new THREE.Mesh(sg, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1, side: THREE.DoubleSide }));
-    skirt.receiveShadow = true; scene.add(skirt);
-    const bottom = new THREE.Mesh(new THREE.CircleGeometry(R * 0.9, 64), new THREE.MeshStandardMaterial({ color: '#221C17', roughness: 1 }));
-    bottom.rotation.x = Math.PI / 2; bottom.position.y = -2.6; scene.add(bottom);
-
-    /* water */
     const wg = radialGrid(26, 96, R * 0.995, () => WATER_Y);
     waterPos = wg.attributes.position; waterBase = Float32Array.from(waterPos.array);
     waterMat = new THREE.MeshStandardMaterial({ color: '#2B5D77', roughness: 0.22, metalness: 0.2, flatShading: true, transparent: true, opacity: 0.92 });
     water = new THREE.Mesh(wg, waterMat); water.receiveShadow = true; scene.add(water);
 
-    /* house with turf roof, flagpole and pennant */
-    let best = null;
-    for (let x = -6; x <= -0.5; x += 0.25) for (let dz = 1.1; dz <= 3.4; dz += 0.25) {
-      const z = fjordZ(x) + dz, h = heightAt(x, z); if (h < 0.22 || h > 1.4) continue;
-      const score = (1 - normalY(x, z)) * 12 + Math.abs(h - 0.5) + Math.abs(dz - 1.8) * 0.3;
-      if (!best || score < best.s) best = { s: score, x, z, h };
-    }
-    best = best || { x: -3, z: 3, h: 0.5 };
-    houseY = best.h;
-    const house = new THREE.Group(); house.position.set(best.x, best.h - 0.06, best.z); house.rotation.y = 0.25;
-    const body = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.62, 0.72), new THREE.MeshStandardMaterial({ color: '#9E2B23', roughness: 0.85, flatShading: true }));
-    body.position.y = 0.31; body.castShadow = true; body.receiveShadow = true; house.add(body);
-    const tri = new THREE.Shape(); tri.moveTo(-0.46, 0); tri.lineTo(0.46, 0); tri.lineTo(0, 0.36); tri.lineTo(-0.46, 0);
-    const rg = new THREE.ExtrudeGeometry(tri, { depth: 1.14, bevelEnabled: false }); rg.translate(0, 0, -0.57); rg.rotateY(Math.PI / 2);
-    roofMat = new THREE.MeshStandardMaterial({ color: '#5E6B35', roughness: 1, flatShading: true });
-    const roof = new THREE.Mesh(rg, roofMat); roof.position.y = 0.62; roof.castShadow = true; house.add(roof);
-    winMat = new THREE.MeshBasicMaterial({ color: '#2A2B2E' });
-    [-0.24, 0.24].forEach(x => { const w = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.15), winMat); w.position.set(x, 0.36, -0.362); w.rotation.y = Math.PI; house.add(w); });
-    const door = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.3), new THREE.MeshStandardMaterial({ color: '#E8E2D6' })); door.position.set(0.02, 0.15, 0.362); house.add(door);
-    const sideWin = new THREE.Mesh(new THREE.PlaneGeometry(0.14, 0.14), winMat); sideWin.position.set(0.501, 0.36, 0); sideWin.rotation.y = Math.PI / 2; house.add(sideWin);
-    scene.add(house);
-    const px = best.x + 1.05, pz = best.z + 0.35, ph = heightAt(px, pz);
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.03, 1.9, 6), new THREE.MeshStandardMaterial({ color: '#F1EFEA' }));
-    pole.position.set(px, ph + 0.95, pz); pole.castShadow = true; scene.add(pole);
-    const pc = document.createElement('canvas'); pc.width = 128; pc.height = 16; const px2 = pc.getContext('2d');
-    px2.fillStyle = '#BA0C2F'; px2.fillRect(0, 0, 128, 16); px2.fillStyle = '#FFFFFF'; px2.fillRect(0, 5, 128, 6); px2.fillStyle = '#00205B'; px2.fillRect(0, 6.5, 128, 3);
-    const pg = new THREE.PlaneGeometry(1.4, 0.2, 20, 1); pg.translate(0.7, 0, 0);
-    penPos = pg.attributes.position;
-    for (let i = 0; i < penPos.count; i++) penPos.setY(i, penPos.getY(i) * (1 - 0.82 * penPos.getX(i) / 1.4));
-    penBase = Float32Array.from(penPos.array);
-    const pennant = new THREE.Mesh(pg, new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(pc), side: THREE.DoubleSide, roughness: 0.8 }));
-    pennant.castShadow = true;
-    pennantG = new THREE.Group(); pennantG.position.set(px, ph + 1.82, pz); pennantG.rotation.order = 'YZX'; pennantG.add(pennant); scene.add(pennantG);
-
-    /* trees (instanced) */
-    const coneG = new THREE.ConeGeometry(0.26, 0.82, 6, 1); coneG.translate(0, 0.38, 0);
-    treeMat = new THREE.MeshStandardMaterial({ color: '#2E4A31', flatShading: true, roughness: 1 });
-    const trees = new THREE.InstancedMesh(coneG, treeMat, 110); trees.castShadow = true; trees.receiveShadow = true;
-    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sv = new THREE.Vector3(), pv = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
-    let placed = 0, tries = 0;
-    while (placed < 110 && tries < 6000) {
-      tries++;
-      const a = rng() * Math.PI * 2, r = Math.sqrt(rng()) * 9.2, x = Math.cos(a) * r, z = Math.sin(a) * r, h = heightAt(x, z);
-      if (h < WATER_Y + 0.18 || h > 2.6 || normalY(x, z) < 0.8) continue;
-      if (Math.hypot(x - best.x, z - best.z) < 1.3 || Math.hypot(x - px, z - pz) < 0.5) continue;
-      if (fbm(x * 0.35 + 5, z * 0.35 + 9) < 0.47) continue;
-      const s = 0.65 + rng() * 0.65; q.setFromAxisAngle(up, rng() * 6.28); sv.set(s, s * (0.9 + rng() * 0.4), s); pv.set(x, h - 0.04, z);
-      m4.compose(pv, q, sv); trees.setMatrixAt(placed++, m4);
-    }
-    trees.count = placed; trees.instanceMatrix.needsUpdate = true; scene.add(trees);
-
-    /* boat */
-    boat = new THREE.Group();
-    const hull = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.14, 0.26), new THREE.MeshStandardMaterial({ color: '#F2F0EA', flatShading: true }));
-    const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.16, 0.18), new THREE.MeshStandardMaterial({ color: '#2B3B48', flatShading: true }));
-    cabin.position.set(-0.08, 0.14, 0); hull.castShadow = true; boat.add(hull, cabin);
-    boat.position.set(2.6, WATER_Y + 0.05, fjordZ(2.6) - 0.15); boat.rotation.y = -Math.atan(0.9 * 0.33 * Math.cos(2.6 * 0.33 + 0.6));
-    scene.add(boat);
-
-    /* clouds */
     const puffG = new THREE.IcosahedronGeometry(1, 1);
     for (let i = 0; i < CLOUD_N; i++) {
       const mat = new THREE.MeshStandardMaterial({ color: '#F2F4F6', roughness: 1, flatShading: true, transparent: true, opacity: 0 });
       const g = new THREE.Group(), k = 4 + Math.floor(rng() * 4);
       for (let p = 0; p < k; p++) {
-        const m = new THREE.Mesh(puffG, mat);
-        const s = 0.55 + rng() * 0.7;
+        const m = new THREE.Mesh(puffG, mat), s = 0.55 + rng() * 0.7;
         m.position.set((p - k / 2) * 0.62 + (rng() - 0.5) * 0.4, (rng() - 0.3) * 0.35 + (p > 0 && p < k - 1 ? 0.25 : 0), (rng() - 0.5) * 0.7);
         m.scale.set(s * 1.15, s * 0.78, s); m.castShadow = true; g.add(m);
       }
@@ -887,31 +1166,26 @@ const Scene = (() => {
     }
     clouds.sort((a, b) => a.userData.order - b.userData.order);
 
-    /* rain */
     rainPos = new Float32Array(RAIN_N * 6);
     for (let i = 0; i < RAIN_N; i++) spawnDrop(i, true);
     const rgeo = new THREE.BufferGeometry(); rgeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3)); rgeo.setDrawRange(0, 0);
     rainMat = new THREE.LineBasicMaterial({ color: '#C4D6E4', transparent: true, opacity: 0.55 });
     rain = new THREE.LineSegments(rgeo, rainMat); rain.frustumCulled = false; scene.add(rain);
 
-    /* snow */
     snowPos = new Float32Array(SNOW_N * 3); snowPhase = new Float32Array(SNOW_N);
     for (let i = 0; i < SNOW_N; i++) { spawnFlake(i, true); snowPhase[i] = rng() * 6.28; }
     const sgeo = new THREE.BufferGeometry(); sgeo.setAttribute('position', new THREE.BufferAttribute(snowPos, 3)); sgeo.setDrawRange(0, 0);
     snowMat = new THREE.PointsMaterial({ size: 0.17, map: spriteTex('rgba(255,255,255,1)', 'rgba(255,255,255,0)'), transparent: true, depthWrite: false, color: '#FFFFFF' });
     snow = new THREE.Points(sgeo, snowMat); snow.frustumCulled = false; scene.add(snow);
 
-    /* lightning */
     boltPos = new Float32Array(16 * 3);
     const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.BufferAttribute(boltPos, 3));
     boltMat = new THREE.LineBasicMaterial({ color: '#F4F2FF', transparent: true, opacity: 0, fog: false });
     bolt = new THREE.Line(bg, boltMat); bolt.frustumCulled = false; scene.add(bolt);
 
-    /* sky bodies */
     sunMesh = new THREE.Mesh(new THREE.SphereGeometry(1.5, 24, 16), new THREE.MeshBasicMaterial({ color: '#FFE7B0', fog: false, transparent: true }));
     sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: spriteTex('rgba(255,214,140,0.85)', 'rgba(255,190,110,0)'), blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false }));
-    sunGlow.scale.set(13, 13, 1);
-    scene.add(sunMesh, sunGlow);
+    sunGlow.scale.set(13, 13, 1); scene.add(sunMesh, sunGlow);
     moonMat = new THREE.ShaderMaterial({
       uniforms: { uL: { value: new THREE.Vector3(1, 0, 0) }, uOp: { value: 1 } }, transparent: true, depthWrite: false,
       vertexShader: 'varying vec3 vN; void main(){ vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
@@ -924,7 +1198,6 @@ const Scene = (() => {
     starMat = new THREE.PointsMaterial({ size: 1.6, sizeAttenuation: false, color: '#FFFFFF', transparent: true, opacity: 0, fog: false, depthWrite: false });
     stars = new THREE.Points(stg, starMat); scene.add(stars);
 
-    /* lights */
     hemi = new THREE.HemisphereLight('#BFD6EE', '#3A362F', 0.6); scene.add(hemi);
     amb = new THREE.AmbientLight('#8FA3BF', 0.12); scene.add(amb);
     sunLight = new THREE.DirectionalLight('#FFF1DC', 1.2);
@@ -947,7 +1220,7 @@ const Scene = (() => {
   }
   function strike() {
     const a = Math.random() * Math.PI * 2, r = Math.random() * 6;
-    let x = Math.cos(a) * r, z = Math.sin(a) * r; const gy = Math.max(heightAt(x, z), WATER_Y);
+    let x = Math.cos(a) * r, z = Math.sin(a) * r; const gy = land ? Math.max(heightAt(x, z), WATER_Y) : 0;
     for (let i = 0; i < 16; i++) {
       const t = i / 15, y = lerp(6.4, gy, t);
       if (i > 0 && i < 15) { x += (Math.random() - 0.5) * 0.7; z += (Math.random() - 0.5) * 0.7; }
@@ -965,11 +1238,11 @@ const Scene = (() => {
   const _t = new THREE.Color(), _h = new THREE.Color(), _a = new THREE.Color(), _b = new THREE.Color();
   function skyColors(alt) {
     let i = 0; while (i < SKY_KEYS.length - 2 && alt > SKY_KEYS[i + 1][0]) i++;
-    const A = SKY_KEYS[i], B = SKY_KEYS[i + 1], t = clamp((alt - A[0]) / (B[0] - A[0]), 0, 1);
-    _t.set(A[1]).lerp(_a.set(B[1]), t); _h.set(A[2]).lerp(_b.set(B[2]), t);
+    const A = SKY_KEYS[i], Bk = SKY_KEYS[i + 1], t = clamp((alt - A[0]) / (Bk[0] - A[0]), 0, 1);
+    _t.set(A[1]).lerp(_a.set(Bk[1]), t); _h.set(A[2]).lerp(_b.set(Bk[2]), t);
     const lum = smooth(-9, 10, alt);
-    const ovT = _a.set('#0D1116').lerp(_b.set('#76848F'), lum), ovT2 = ovT.clone().lerp(_b.set('#39424B'), st.storm * lum);
-    const ovH = _a.set('#191F26').lerp(_b.set('#B2BCC3'), lum), ovH2 = ovH.clone().lerp(_b.set('#5D6870'), st.storm * lum);
+    const ovT2 = _a.set('#0D1116').lerp(_b.set('#76848F'), lum).clone().lerp(_b.set('#39424B'), st.storm * lum);
+    const ovH2 = _a.set('#191F26').lerp(_b.set('#B2BCC3'), lum).clone().lerp(_b.set('#5D6870'), st.storm * lum);
     const k = clamp(Math.pow(st.cloud, 1.4) * 0.92 + st.fog * 0.5, 0, 1);
     _t.lerp(ovT2, k); _h.lerp(ovH2, k);
     if (st.fog > 0.01) { _h.lerp(_a.set('#A9B3B9').multiplyScalar(0.25 + 0.75 * lum), st.fog * 0.8); _t.lerp(_h, st.fog * 0.45); }
@@ -977,22 +1250,21 @@ const Scene = (() => {
     return [_t, _h];
   }
 
-  function init(stage, sky, cv) {
+  function init(stage, sky, cv, place, key) {
     skyEl = sky; canvas = cv;
-    if (!window.THREE) return false;
-    try {
-      renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
-    } catch (e) { return false; }
+    try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' }); }
+    catch (e) { return false; }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.setClearColor(0x000000, 0);
     scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(34, 1, 0.5, 300);
-    build(); recolor();
+    build();
+    ok = true;
+    setBiome(key, place);
     resize();
     new ResizeObserver(resize).observe(sky);
     if ('IntersectionObserver' in window) new IntersectionObserver(es => { visible = es[0].isIntersecting; }).observe(sky);
-    // drag to turn
     canvas.addEventListener('pointerdown', e => { dragging = true; lastX = e.clientX; lastY = e.clientY; canvas.classList.add('drag'); try { canvas.setPointerCapture(e.pointerId); } catch (_) {} });
     canvas.addEventListener('pointermove', e => {
       if (!dragging) return;
@@ -1002,7 +1274,6 @@ const Scene = (() => {
     });
     const end = () => { if (dragging) { dragging = false; az0 = az; lastInteract = performance.now(); canvas.classList.remove('drag'); } };
     canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end); canvas.addEventListener('lostpointercapture', end);
-    ok = true;
     return true;
   }
 
@@ -1017,7 +1288,7 @@ const Scene = (() => {
     camera.updateProjectionMatrix();
   }
 
-  function setTarget(s, place) {
+  function setTarget(s) {
     if (!s) return;
     const k = codeKind(s.code), p = Math.max(0, s.precip || 0);
     const inten = clamp(0.28 + Math.sqrt(p / 3) * 0.72, 0, 1);
@@ -1039,25 +1310,25 @@ const Scene = (() => {
     tg.cloud = cloud; tg.rain = rainA; tg.snow = snowA; tg.storm = storm; tg.fog = fog;
     tg.wind = s.wind || 0; const v = dirVec((s.dir || 0) + 180); tg.wx = v[0]; tg.wz = v[1];
     tg.temp = s.temp ?? 3;
-    tg.snowline = clamp(2.3 + tg.temp * 0.42 - snowA * 1.7, 0.02, 9);
-    if (place) { st.lat = place.lat; st.lon = place.lon; st.south = place.lat < 0; }
+    tg.snowline = clamp(2.3 + tg.temp * 0.42 - snowA * 1.7, 0.02, 12);
   }
   let monthAt = -1e15, monthTz = '';
   function setTime(ms, tz) { tg.time = ms; if (Math.abs(ms - monthAt) > 3600e3 || tz !== monthTz) { monthAt = ms; monthTz = tz; const m = localMonth(ms, tz); st.month = st.south ? (m + 6) % 12 : m; } }
 
   const vSun = new THREE.Vector3(), vMoon = new THREE.Vector3(), vF = new THREE.Vector3(), vR = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
-  function tick(dt, t) {
+  function tick(dt, t, rawDt) {
     if (!ok) return;
-    const k = 1 - Math.exp(-dt * 2.2);
+    const sdt = rawDt || dt; // weather state follows real elapsed time, even when frames are slow
+    const k = 1 - Math.exp(-sdt * 2.2);
     for (const n of ['cloud', 'rain', 'snow', 'storm', 'fog', 'wind', 'wx', 'wz', 'temp']) st[n] += (tg[n] - st[n]) * k;
-    st.snowline += (tg.snowline - st.snowline) * (1 - Math.exp(-dt * 0.9));
+    st.snowline += (tg.snowline - st.snowline) * (1 - Math.exp(-sdt * 0.9));
     let diff = tg.time - st.time;
     if (Math.abs(diff) > 30 * 3600e3) { st.time = tg.time - Math.sign(diff) * 6 * 3600e3; diff = tg.time - st.time; }
-    st.time += diff * (1 - Math.exp(-dt * 3));
+    st.time += diff * (1 - Math.exp(-sdt * 3));
     if (!visible) return;
     const pdt = REDUCE ? 0 : dt;
 
-    if (Math.abs(st.snowline - lastSnow) > 0.03 || lastVeg !== String(st.month)) recolor();
+    if (land && (Math.abs(st.snowline - lastSnow) > 0.03 || lastMonth !== st.month)) recolor();
 
     /* sun & moon */
     const sp = sunPos(st.time, st.lat, st.lon), alt = sp.alt, day = smooth(-6, 8, alt);
@@ -1108,23 +1379,22 @@ const Scene = (() => {
       for (let i = 0; i < arr.length; i += 3) { const x = waterBase[i], z = waterBase[i + 2]; arr[i + 1] = WATER_Y + Math.sin(x * 1.3 + t * 1.7 + z * 0.4) * wa + Math.cos(z * 1.9 - t * 1.25) * wa; }
       waterPos.needsUpdate = true;
     }
-    waterMat.color.set('#2B5D77').lerp(hor, 0.22);
-    boat.position.y = WATER_Y + 0.05 + (REDUCE ? 0 : Math.sin(t * 1.4) * (0.02 + wa));
-    boat.rotation.z = REDUCE ? 0 : Math.sin(t * 1.1) * (0.02 + wa * 1.5);
+    waterMat.color.copy(waterBaseColor).lerp(hor, 0.22);
+    boats.forEach(b => { const ph = b.userData.ph; b.position.y = WATER_Y + 0.05 + (REDUCE ? 0 : Math.sin(t * 1.4 + ph) * (0.02 + wa)); b.rotation.z = REDUCE ? 0 : Math.sin(t * 1.1 + ph) * (0.02 + wa * 1.5); });
 
-    /* snow on roof & trees, lit windows */
-    const roofSnow = 1 - smooth(houseY + 0.25, houseY + 0.85, st.snowline);
-    roofMat.color.set('#5E6B35').lerp(COL.snow, roofSnow * 0.92);
-    treeMat.color.set('#2E4A31').lerp(COL.snow, (1 - smooth(0.6, 1.6, st.snowline)) * 0.55);
-    winMat.color.set('#2A2B2E').lerp(_a.set('#FFD27A'), clamp(1 - day + st.storm * 0.4, 0, 1));
+    /* lit windows */
+    const lit = clamp(1 - day + st.storm * 0.4, 0, 1);
+    if (winMat) winMat.color.set('#2A2B2E').lerp(_a.set('#FFD27A'), lit);
+    cityMats.forEach(m => { m.emissiveIntensity = lit * 0.95; });
+    if (cityRoof) cityRoof.color.set('#6E7175').lerp(SNOWC, (1 - smooth(0.6, 1.4, st.snowline)) * 0.9);
 
-    /* pennant */
-    const lift = smooth(0.6, 8, st.wind);
-    pennantG.rotation.y = Math.atan2(-st.wz, st.wx);
-    pennantG.rotation.z = -(1 - lift) * 1.35;
-    const pa = penPos.array, wspd = 3 + st.wind * 0.9, amp = 0.04 + 0.1 * lift;
-    for (let i = 0; i < pa.length; i += 3) { const u = penBase[i] / 1.4; pa[i + 2] = REDUCE ? 0 : Math.sin(u * 7 - t * wspd) * amp * u; }
-    penPos.needsUpdate = true;
+    /* windsock: points downwind, hangs when calm */
+    if (sockG) {
+      const lift = smooth(0.5, 9, st.wind);
+      sockG.rotation.y = Math.atan2(-st.wz, st.wx);
+      sockG.rotation.z = -(1 - lift) * 1.25;
+      sockG.rotation.x = REDUCE ? 0 : Math.sin(t * 7) * 0.12 * lift;
+    }
 
     /* clouds */
     const cColor = _a.set('#F3F5F7').lerp(_b.set('#8F9AA4'), clamp((st.rain + st.snow) * 1.2, 0, 1)).lerp(_b.set('#4E5862'), st.storm * 0.85);
@@ -1134,8 +1404,7 @@ const Scene = (() => {
       g.position.x += st.wx * drift; g.position.z += st.wz * drift;
       const d = Math.hypot(g.position.x, g.position.z);
       if (d > 12.8) { const f = -11.6 / d; g.position.x *= f; g.position.z *= f; }
-      const presence = clamp(st.cloud * CLOUD_N * 1.05 - i, 0, 1);
-      const fade = 1 - smooth(10, 12.8, d);
+      const presence = clamp(st.cloud * CLOUD_N * 1.05 - i, 0, 1), fade = 1 - smooth(10, 12.8, d);
       u.mat.opacity = presence * fade * 0.96;
       u.mat.color.copy(cColor);
       u.mat.emissive.copy(cColor).multiplyScalar(0.06 + flash * 0.5);
@@ -1186,7 +1455,7 @@ const Scene = (() => {
     renderer.render(scene, camera);
   }
 
-  return { init, tick, setTarget, setTime, get ok() { return ok; } };
+  return { init, tick, setTarget, setTime, setBiome, get ok() { return ok; } };
 })();
 
 /* ============================================================
@@ -1358,7 +1627,7 @@ function renderDetails(s, timeMs) {
 function onSceneChange(force) {
   if (!D) return;
   const f = baseF() + S.sceneH, s = sampleAt(f), timeMs = Date.now() + S.sceneH * 3600e3;
-  Scene.setTarget(s, D.place);
+  Scene.setTarget(s);
   updateOverlay(s, timeMs);
   const sl = $('scrub'), mx = Math.max(0.01, Math.min(CFG.hoursShown - 1, maxSceneH()));
   sl.max = mx.toFixed(2);
@@ -1368,6 +1637,8 @@ function onSceneChange(force) {
   const col = Math.floor(f) - D.idxNow;
   if (col !== S.lastCol || force) {
     S.lastCol = col;
+    const mo = localMonth(timeMs, D.tz);
+    setText($('biomeLabel'), biomeText(D.biome, D.place.lat < 0 ? (mo + 6) % 12 : mo));
     moveSel(col, S.playing);
     renderDetails(s, timeMs);
     markDay(timeMs);
@@ -1395,6 +1666,8 @@ function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = fals
 let loadSeq = 0;
 function setData(d) {
   D = prepare(d);
+  D.biome = classify(D.place, D);
+  Scene.setBiome(D.biome, D.place);
   PLACE = Object.assign({}, D.place);
   store.set('place', PLACE);
   S.sceneH = clamp(S.sceneH, 0, maxSceneH()); S.selDay = -1;
@@ -1422,7 +1695,7 @@ async function load(place, silent) {
 const q = $('q'), res = $('results');
 let searchT, searchSeq = 0, items = [], active = -1;
 function recents() { return store.get('recents', []); }
-function addRecent(p) { const r = recents().filter(x => !(Math.abs(x.lat - p.lat) < 0.01 && Math.abs(x.lon - p.lon) < 0.01)); r.unshift({ name: p.name, sub: p.sub, lat: p.lat, lon: p.lon, tz: p.tz }); store.set('recents', r.slice(0, 6)); }
+function addRecent(p) { const r = recents().filter(x => !(Math.abs(x.lat - p.lat) < 0.01 && Math.abs(x.lon - p.lon) < 0.01)); r.unshift({ name: p.name, sub: p.sub, lat: p.lat, lon: p.lon, tz: p.tz, pop: p.pop, elev: p.elev, biome: p.biome }); store.set('recents', r.slice(0, 6)); }
 function openList(html, list) {
   items = list; active = -1;
   res.innerHTML = html; res.hidden = false; q.setAttribute('aria-expanded', 'true');
@@ -1430,7 +1703,7 @@ function openList(html, list) {
 function closeList() { res.hidden = true; q.setAttribute('aria-expanded', 'false'); q.removeAttribute('aria-activedescendant'); }
 function rowsHTML(list, offset) { return list.map((p, i) => `<li role="option" id="opt${i + offset}" data-k="${i + offset}" aria-selected="false"><b>${esc(p.name)}</b><span>${esc(p.sub || '')}</span><em>${p.lat.toFixed(1)}, ${p.lon.toFixed(1)}</em></li>`).join(''); }
 function showDefaults() {
-  const r = recents(), quick = GAZ.slice(0, 8).filter(g => !r.some(x => x.name === g.name));
+  const r = recents(), quick = GAZ.slice(0, 10).filter(g => !r.some(x => x.name === g.name));
   let html = '', list = [];
   if (r.length) { html += '<li class="rhead" role="presentation">Recent</li>' + rowsHTML(r, 0); list = list.concat(r); }
   html += '<li class="rhead" role="presentation">Places</li>' + rowsHTML(quick, list.length); list = list.concat(quick);
@@ -1510,7 +1783,7 @@ $('retryBtn').addEventListener('click', () => load(PLACE));
 /* ---------- main loop ---------- */
 let lastFrame = performance.now(), secAcc = 0, sceneLive = true;
 function frame(now) {
-  const dt = Math.min(0.05, (now - lastFrame) / 1000); lastFrame = now;
+  const rawDt = Math.min(3, (now - lastFrame) / 1000), dt = Math.min(0.05, rawDt); lastFrame = now;
   if (D) {
     if (S.playing) {
       const end = Math.min(CFG.hoursShown - 1, maxSceneH());
@@ -1528,7 +1801,7 @@ function frame(now) {
     }
   }
   if (sceneLive) {
-    try { Scene.tick(dt, now / 1000); }
+    try { Scene.tick(dt, now / 1000, rawDt); }
     catch (err) { sceneLive = false; console.error('3D view stopped:', err); }
   }
   requestAnimationFrame(frame);
@@ -1536,7 +1809,7 @@ function frame(now) {
 
 /* ---------- boot ---------- */
 syncUnitButtons();
-if (!Scene.init($('stage'), $('sky'), $('gl'))) {
+if (!Scene.init($('stage'), $('sky'), $('gl'), PLACE, classify(PLACE, null))) {
   const n = document.createElement('div'); n.className = 'nogl'; n.textContent = 'The 3D view needs WebGL, which isn’t available here.'; $('sky').appendChild(n);
 }
 requestAnimationFrame(frame);
